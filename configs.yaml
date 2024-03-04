@@ -1,0 +1,40 @@
+seed: 49
+
+dump_cfg_path: "experiments/${timestamp}"
+default_dtype: "float32"
+
+data_cfg:
+  dataset: "mnist"
+  img_size: 32
+  img_channels: 1
+
+diffusion_cfg:
+  max_time_steps: 500
+  reverse_type: "ddpm"
+  inference_steps: 500
+
+train_cfg:
+  batch_size: 16
+  epochs: 1000
+  checkpoint:
+    dir: "experiments/${timestamp}/checkpoints"
+    max_to_keep: 2
+  model:
+    n_channels: 64
+    channel_mults:
+      - 1
+      - 2
+      - 4
+      - 8
+    is_attn:
+      - false
+      - false
+      - true
+      - true
+    input_channels: 1
+    n_blocks: 2
+  sample_every: 1000
+
+infer_cfg:
+  gif_dir: "experiments/${timestamp}/generated_data/gifs"
+  png_dir: "experiments/${timestamp}/generated_data/pngs"
