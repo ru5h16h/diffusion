@@ -21,9 +21,12 @@ def train(
   epochs = configs.cfg["train_cfg", "epochs"]
   sample_every = configs.cfg["train_cfg", "sample_every"]
   max_time_steps = configs.cfg["diffusion_cfg", "max_time_steps"]
+
+  logs_dir = configs.cfg["train_cfg", "train_logs_dir"]
+  summary_writer = tf.summary.create_file_writer(logs_dir)
+
   for epoch in range(epochs):
     bar = tf.keras.utils.Progbar(len(tf_dataset) - 1)
-    losses = []
     for idx, batch in enumerate(iter(tf_dataset)):
       # Generate random time steps for each image in the batch.
       time_steps = tf.random.uniform(
@@ -35,19 +38,22 @@ def train(
       # Get noised data using forward process.
       data = diff_model.forward_process(x_0=batch, step_t=time_steps)
       # Perform train step.
-      loss = unet_model.train_step(data=data, time_steps=time_steps)
-      losses.append(loss)
+      unet_model.train_step(data=data, time_steps=time_steps)
 
       # Infer after appropriate steps.
       step = epoch * data_len + idx
       if step % sample_every == 0 and step > 0:
         infer.infer(unet_model=unet_model, diff_model=diff_model, step=step)
 
-      bar.update(idx, values=[("loss", loss)])
+      bar.update(idx)
 
-    avg = tf.reduce_mean(losses)
-    logging.info(f"Average loss for epoch {epoch + 1}/{epochs}: {avg}")
+    loss = unet_model.loss_metric.result()
+    with summary_writer.as_default():
+      tf.summary.scalar("loss", loss, step=epoch)
+    logging.info(f"Average loss for epoch {epoch + 1}/{epochs}: {loss: 0.4f}")
+
     ckpt_manager.save(checkpoint_number=epoch)
+    unet_model.reset_metric_states()
 
 
 def main():

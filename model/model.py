@@ -52,6 +52,7 @@ class UNetWithAttention(tf.keras.Model):
 
     # Define optimizer for training process.
     self.optimizer = tf.keras.optimizers.Adam(learning_rate=tf.Variable(1e-4))
+    self.loss_metric = tf.keras.metrics.Mean("train_loss", dtype=tf.float32)
 
   def get_encoder_layers(self):
     # Create empty list of list to store encoder layers.
@@ -101,9 +102,6 @@ class UNetWithAttention(tf.keras.Model):
     return decoder_layers
 
   def call(self, ft, time_steps=[1], training=True, **kwargs):
-    # input_layer = tf.keras.Input(shape=(32, 32, 1))
-    # ft = self.init_conv(input_layer)
-
     time_emb = self.time_nn(time_steps)
 
     ft = self.init_conv(ft)
@@ -128,14 +126,13 @@ class UNetWithAttention(tf.keras.Model):
     ft = self.norm(ft)
     ft = self.act_fn(ft)
     ft = self.final_conv(ft)
-
-    # model = tf.keras.Model(inputs=input_layer, outputs=ft)
-    # ft = model(x)
-    # model.summary()
     return ft
 
   def loss_fn(self, real_noise, pred_noise):
     return tf.math.reduce_mean((real_noise - pred_noise)**2)
+
+  def reset_metric_states(self):
+    self.loss_metric.reset_states()
 
   @tf.function
   def train_step(self, data, time_steps):
@@ -147,4 +144,5 @@ class UNetWithAttention(tf.keras.Model):
 
     gradients = tape.gradient(loss, self.trainable_variables)
     self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
-    return loss
+
+    self.loss_metric(loss)

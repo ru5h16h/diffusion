@@ -10,8 +10,8 @@ data_cfg:
 
 diffusion_cfg:
   max_time_steps: 500
-  reverse_type: "ddpm"
-  inference_steps: 500
+  reverse_type: "ddim"
+  inference_steps: 10
 
 train_cfg:
   batch_size: 16
@@ -33,7 +33,8 @@ train_cfg:
       - true
     input_channels: 1
     n_blocks: 2
-  sample_every: 1000
+  sample_every: 10000
+  train_logs_dir: "experiments/${timestamp}/logs"
 
 infer_cfg:
   gif_dir: "experiments/${timestamp}/generated_data/gifs"

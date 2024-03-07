@@ -5,6 +5,8 @@ from typing import Tuple
 
 import tensorflow as tf
 
+import configs
+
 
 class Diffusion:
   """The class encapsulating (reverse) diffusion process.
@@ -55,6 +57,7 @@ class Diffusion:
     self.neg_sqrt_alpha_bar = tf.sqrt(1 - self.alpha_bar)
 
     self.pred_coeff_ddpm = self.beta / self.neg_sqrt_alpha_bar
+    self.rng = tf.random.Generator.from_seed(configs.cfg["seed"])
 
   def _gather(self, tf_array: tf.Tensor, indices: tf.Tensor):
     """Returns tensor after `gather`-ing and adding dimensions."""
@@ -63,7 +66,7 @@ class Diffusion:
 
   def get_noise(self, shape: Tuple[int, ...]) -> tf.Tensor:
     """Returns Gaussian noise tensor of given shape."""
-    return tf.random.normal(shape=shape, mean=0, stddev=1)
+    return self.rng.normal(shape=shape, mean=0.0, stddev=1.0)
 
   def forward_process(
       self,

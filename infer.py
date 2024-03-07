@@ -26,9 +26,13 @@ def divide_batch_size(batch_size: int) -> Tuple[int, int]:
   raise ValueError(f"Batch size: {batch_size} cannot be divided.")
 
 
-def get_canvas_dim(img_batch):
-  batch_size, width, height, _ = img_batch.shape
-  num_rows, num_cols = divide_batch_size(batch_size)
+def get_canvas_dim(sequence, only_last=True):
+  batch_size, width, height, _ = sequence[0].shape
+  if only_last:
+    num_rows, num_cols = divide_batch_size(batch_size)
+  else:
+    num_rows = batch_size
+    num_cols = len(sequence)
   f_width = num_cols * width + (num_cols - 1) * SEP_WIDTH
   f_height = num_rows * height + (num_rows - 1) * SEP_WIDTH
   return f_width, f_height, num_cols, num_rows
@@ -56,7 +60,7 @@ def get_png_path(step: Union[str, int]) -> str:
 
 def store_gif(sequence: List[np.ndarray], step: Union[str, int]) -> None:
   _, width, height, channels = sequence[0].shape
-  f_width, f_height, num_cols, num_rows = get_canvas_dim(img_batch=sequence[0])
+  f_width, f_height, num_cols, num_rows = get_canvas_dim(sequence=sequence)
 
   # Process each image batch in the sequence.
   final_seq = []
@@ -79,16 +83,28 @@ def store_gif(sequence: List[np.ndarray], step: Union[str, int]) -> None:
   imageio.mimsave(gif_path, final_seq, fps=10)
 
 
-def store_jpeg(img_batch: np.ndarray, step: Union[str, int]) -> None:
-  _, width, height, _ = img_batch.shape
+def store_jpeg(
+    sequence: List[np.ndarray],
+    step: Union[str, int],
+    only_last: bool,
+) -> None:
+  _, width, height, _ = sequence[0].shape
   f_sub_img_shape = (height, width, 3)
-  f_width, f_height, num_cols, num_rows = get_canvas_dim(img_batch=img_batch)
+  f_width, f_height, num_cols, num_rows = get_canvas_dim(
+      sequence=sequence,
+      only_last=only_last,
+  )
   # Create a canvas of required shape.
   canvas = (np.ones((f_height, f_width, 3)) * 255).astype(np.uint8)
   for idx in range(num_rows):
     for jdx in range(num_cols):
-      bdx = idx * num_cols + jdx
-      image = img_batch[bdx]
+      if only_last:
+        bdx = idx * num_cols + jdx
+        sdx = -1
+      else:
+        bdx = idx
+        sdx = jdx
+      image = sequence[sdx][bdx]
       image = np.broadcast_to(image, f_sub_img_shape)
       row_s, col_s, row_e, col_e = get_coord(idx, jdx, height, width)
       canvas[row_s:row_e, col_s:col_e, :] = image
@@ -153,7 +169,7 @@ def infer(
     bar.update(idx + 1)
 
   store_gif(sequence=to_gif, step=step)
-  store_jpeg(img_batch=to_gif[-1], step=step)
+  store_jpeg(sequence=to_gif, step=step, only_last=False)
 
 
 def main():
