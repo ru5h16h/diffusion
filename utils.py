@@ -23,5 +23,12 @@ def get_default_dtype():
   return tf.as_dtype(configs.cfg["default_dtype"])
 
 
+def get_input_shape():
+  batch = configs.cfg["train_cfg", "batch_size"]
+  img_size = configs.cfg["data_cfg", "img_size"]
+  img_channels = configs.cfg["train_cfg", "model", "out_channels"]
+  return (batch, img_size, img_size, img_channels)
+
+
 if __name__ == "__main__":
   sys.exit("Intended for import.")

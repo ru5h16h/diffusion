@@ -6,18 +6,23 @@ default_dtype: "float32"
 data_cfg:
   dataset: "mnist"
   img_size: 32
-  img_channels: 1
 
 diffusion_cfg:
   max_time_steps: 500
-  reverse_type: "ddim"
-  inference_steps: 10
+  sampling_process: "ddim"
+  inference_steps: 32
+  pred_type: "v"
+  variance_schedule: "cosine"
+  to_enforce_zero_terminal_snr: false
 
 train_cfg:
-  batch_size: 16
-  epochs: 1000
+  teacher_checkpoint:
+    directory: "experiments/20240319T105244/checkpoints"
+    max_to_keep: 2
+  batch_size: 32
+  epochs: 20
   checkpoint:
-    dir: "experiments/${timestamp}/checkpoints"
+    directory: "experiments/${timestamp}/checkpoints"
     max_to_keep: 2
   model:
     n_channels: 64
@@ -31,11 +36,13 @@ train_cfg:
       - false
       - true
       - true
-    input_channels: 1
+    out_channels: 1
     n_blocks: 2
-  sample_every: 10000
+  sample_every: 1200
   train_logs_dir: "experiments/${timestamp}/logs"
+  patience: 10
 
 infer_cfg:
   gif_dir: "experiments/${timestamp}/generated_data/gifs"
   png_dir: "experiments/${timestamp}/generated_data/pngs"
+  only_last: True

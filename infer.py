@@ -1,5 +1,7 @@
+#!/usr/bin/env python3
 """Script to generate images."""
 
+import itertools
 import logging
 import math
 import os
@@ -14,6 +16,7 @@ import configs
 from dataset import data_prep
 from diffusion import diffusion
 from model import model
+import utils
 
 SEP_WIDTH = 2
 
@@ -116,83 +119,87 @@ def store_jpeg(
 def infer(
     unet_model: model.UNetWithAttention,
     diff_model: diffusion.Diffusion,
-    img_size: int = None,
-    batch_size: int = None,
-    step: Union[str, int] = "predict",
+    inference_steps: int = None,
+    out_file_id: Union[str, int] = "predict",
 ):
-  # Get the shape of the prediction.
-  if not img_size:
-    img_size = configs.cfg["data_cfg", "img_size"]
-  if not batch_size:
-    batch_size = configs.cfg["train_cfg", "batch_size"]
-  img_channels = configs.cfg["data_cfg", "img_channels"]
-  shape = (batch_size, img_size, img_size, img_channels)
+  """Inference of diffusion model.
+  
+  Args:
+    diff_model: The object of class diffusion.Diffusion containing various
+      function related to diffusion process.
+    unet_model: The trained model.
+    inference steps: Number of inference steps.
+    out_file_id: The ID of output file.
+  """
+  max_time_steps = configs.cfg["diffusion_cfg", "max_time_steps"]
+  if not inference_steps:
+    # It isn't None when distilling the model.
+    inference_steps = configs.cfg["diffusion_cfg", "inference_steps"]
+  # TODO: Debug why starting with max_time_steps is not working. It works when
+  #   inferences starts with max_time_steps - 1.
+  step_size = max_time_steps // inference_steps
+  rem = (max_time_steps - 1) % inference_steps
+  step_sizes = [step_size + 1] * rem + [step_size] * (inference_steps - rem)
+  time_seq = list(itertools.accumulate(step_sizes))
 
   # Generate noise to infer a given batch.
+  shape = utils.get_input_shape()
   model_input = diff_model.get_noise(shape=shape)
 
-  max_time_steps = configs.cfg["diffusion_cfg", "max_time_steps"]
-  reverse_type = configs.cfg["diffusion_cfg", "reverse_type"]
-  inference_steps = configs.cfg["diffusion_cfg", "inference_steps"]
-
-  step_size = max_time_steps // inference_steps
-  time_seq = list(range(1, max_time_steps, step_size))
-
+  sampling_process = configs.cfg["diffusion_cfg", "sampling_process"]
   bar = tf.keras.utils.Progbar(len(time_seq))
   to_gif = []
   # Iterate backward in time for reverse process.
-  for idx, rev_ts in enumerate(reversed(time_seq)):
+  for idx, (ts, ts_size) in enumerate(list(zip(time_seq, step_sizes))[::-1]):
     # Same time steps for all images in batch.
-    step_t = tf.fill((batch_size,), rev_ts)
+    step_t = tf.fill((shape[0],), ts)
     # Get predicted noise.
-    pred_noise = unet_model(model_input, time_steps=step_t)
+    model_output = unet_model(model_input, time_steps=step_t)
+
     # Remove noise.
-    if reverse_type == "ddpm":
+    if sampling_process == "ddpm":
       model_input = diff_model.reverse_process_ddpm(
           x_t=model_input,
-          pred_noise=pred_noise,
+          model_output=model_output,
           step_t=step_t,
       )
-    elif reverse_type == "ddim":
-      if rev_ts == 1:
-        bar.update(idx + 1)
-        continue
-      step_t_minus_1 = step_t - step_size
+    elif sampling_process == "ddim":
+      step_t_minus_1 = step_t - ts_size
       model_input = diff_model.reverse_process_ddim(
           x_t=model_input,
-          pred_noise=pred_noise,
+          model_output=model_output,
           step_t=step_t,
           step_t_minus_1=step_t_minus_1,
       )
+    else:
+      raise ValueError(f"Invalid reverse diffusion type: {sampling_process}.")
+
     # Make list to gif.
     to_gif.append(data_prep.de_normalize(model_input).numpy())
     bar.update(idx + 1)
 
-  store_gif(sequence=to_gif, step=step)
-  store_jpeg(sequence=to_gif, step=step, only_last=False)
+  store_gif(sequence=to_gif, step=out_file_id)
+  store_jpeg(
+      sequence=to_gif,
+      step=out_file_id,
+      only_last=configs.cfg["infer_cfg", "only_last"],
+  )
 
 
 def main():
   configs.cfg = configs.Configs(path="configs.yaml")
 
   # Load diffusion model.
-  max_time_steps = configs.cfg["diffusion_cfg", "max_time_steps"]
-  diff_model = diffusion.Diffusion(max_time_steps=max_time_steps)
+  seed = configs.cfg["seed"]
+  diff_model = diffusion.Diffusion(seed=seed, **configs.cfg["diffusion_cfg"])
 
   # Load UNet model.
-  unet_model = model.UNetWithAttention(
-      input_channels=configs.cfg["data_cfg", "img_channels"],
-      channel_mults=configs.cfg["train_cfg", "model", "channel_mults"],
-      is_attn=configs.cfg["train_cfg", "model", "is_attn"],
-      n_blocks=configs.cfg["train_cfg", "model", "n_blocks"],
-  )
+  unet_model = model.UNetWithAttention(**configs.cfg["train_cfg", "model"])
+
+  # Load checkpoint
   ckpt = tf.train.Checkpoint(unet_model=unet_model)
-  checkpoint_dir = configs.cfg["train_cfg", "checkpoint", "dir"]
-  ckpt_manager = tf.train.CheckpointManager(
-      checkpoint=ckpt,
-      directory=checkpoint_dir,
-      max_to_keep=configs.cfg["train_cfg", "checkpoint", "max_to_keep"],
-  )
+  ckpt_configs = configs.cfg["train_cfg", "checkpoint"]
+  ckpt_manager = tf.train.CheckpointManager(checkpoint=ckpt, **ckpt_configs)
   if ckpt_manager.latest_checkpoint:
     # TODO: Resolve the "Value in checkpoint could not be found in the
     #  restored object" warning.

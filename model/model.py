@@ -12,7 +12,7 @@ class UNetWithAttention(tf.keras.Model):
       n_channels=64,
       channel_mults=[1, 2, 4],
       is_attn=[False, True, True],
-      input_channels=1,
+      out_channels=1,
       n_blocks=2,
   ):
     super(UNetWithAttention, self).__init__()
@@ -42,16 +42,16 @@ class UNetWithAttention(tf.keras.Model):
     self.decoder_layers = self.get_decoder_layers()
 
     # Final layers of UNet.
-    self.norm = tf_layers.GroupNormalization(groups=8, epsilon=1e-05)
+    self.norm = tf_layers.GroupNormalization(groups=8, epsilon=1e-5)
     self.act_fn = activations.SiLU()
     self.final_conv = tf_layers.Conv2D(
-        filters=input_channels,
+        filters=out_channels,
         kernel_size=3,
         padding="same",
     )
 
     # Define optimizer for training process.
-    self.optimizer = tf.keras.optimizers.Adam(learning_rate=tf.Variable(1e-4))
+    self.optimizer = tf.keras.optimizers.AdamW(learning_rate=tf.Variable(1e-4))
     self.loss_metric = tf.keras.metrics.Mean("train_loss", dtype=tf.float32)
 
   def get_encoder_layers(self):
@@ -101,11 +101,15 @@ class UNetWithAttention(tf.keras.Model):
 
     return decoder_layers
 
-  def call(self, ft, time_steps=[1], training=True, **kwargs):
+  def call(self, ft, time_steps):
+    # Get the time embeddings.
     time_emb = self.time_nn(time_steps)
 
+    # Pass through initial convolutional layer.
+    # TODO: Decrease the number of output channels for initial convolution.
     ft = self.init_conv(ft)
 
+    # Create the encoder.
     to_store = []
     for enc_layers in self.encoder_layers:
       for layer in enc_layers:
@@ -113,8 +117,10 @@ class UNetWithAttention(tf.keras.Model):
           to_store.append(ft)
         ft = layer(ft, time_emb)
 
+    # Pass through middle block.
     ft = self.middle_layer(ft, time_emb)
 
+    # Form the decoder.
     for dec_layers in self.decoder_layers:
       for layer in dec_layers:
         if isinstance(layer, layers.Upsample):
@@ -123,26 +129,24 @@ class UNetWithAttention(tf.keras.Model):
         else:
           ft = layer(ft, time_emb)
 
+    # Apply final convolution.
     ft = self.norm(ft)
     ft = self.act_fn(ft)
     ft = self.final_conv(ft)
     return ft
 
-  def loss_fn(self, real_noise, pred_noise):
-    return tf.math.reduce_mean((real_noise - pred_noise)**2)
+  def loss_fn(self, gt, pred):
+    return tf.math.reduce_mean((gt - pred)**2)
 
   def reset_metric_states(self):
     self.loss_metric.reset_states()
 
   @tf.function
   def train_step(self, data, time_steps):
-    image_batch, noise_batch = data
-
+    x_t, gt = data
     with tf.GradientTape() as tape:
-      pred_noise = self(ft=image_batch, time_steps=time_steps, training=True)
-      loss = self.loss_fn(real_noise=noise_batch, pred_noise=pred_noise)
-
+      pred = self(ft=x_t, time_steps=time_steps, training=True)
+      loss = self.loss_fn(gt=gt, pred=pred)
     gradients = tape.gradient(loss, self.trainable_variables)
     self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
-
     self.loss_metric(loss)

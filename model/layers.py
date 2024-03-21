@@ -57,8 +57,11 @@ class Conv2DBlock(layers.Layer):
     else:
       self.dropout = None
 
-  def call(self, ft, training=True):
+  def call(self, ft, scale_shift=None, training=True):
     ft = self.norm(ft, training=training)
+    if scale_shift:
+      scale, shift = scale_shift
+      ft = ft * (scale + 1) + shift
     ft = self.act_fn(ft)
     if self.dropout is not None:
       ft = self.dropout(ft)
@@ -73,7 +76,7 @@ class ResidualBlockWithTimeEmbedding(layers.Layer):
     self.time_nn_final = tf.keras.Sequential(
         layers=[
             activations.SiLU(),
-            layers.Dense(units=out_channels),
+            layers.Dense(units=in_channels * 2),
         ],
         name="time_nn_init",
     )
@@ -93,11 +96,11 @@ class ResidualBlockWithTimeEmbedding(layers.Layer):
       self.res_conv = Identity()
 
   def call(self, ft, time_emb, training=True):
-    time_emb = self.time_nn_final(time_emb)
+    time_emb = self.time_nn_final(time_emb, training=training)
     time_emb = einops.rearrange(time_emb, 'b c -> b 1 1 c')
+    scale_shift = tf.split(time_emb, num_or_size_splits=2, axis=-1)
 
-    hid = self.block_1(ft=ft, training=training)
-    hid += time_emb
+    hid = self.block_1(ft=ft, scale_shift=scale_shift, training=training)
     hid = self.block_2(ft=hid, training=training)
     return hid + self.res_conv(ft)
 
@@ -110,7 +113,7 @@ class TimeEmbedding(layers.Layer):
     self.max_position = max_positions
 
     self.dense_1 = layers.Dense(units=self.n_channels)
-    self.act_fn = activations.SiLU()
+    self.act_fn = activations.GELU()
     self.dense_2 = layers.Dense(units=self.n_channels)
 
   def call(self, pos):
@@ -122,20 +125,33 @@ class TimeEmbedding(layers.Layer):
 
     emb = tf.concat([tf.sin(emb), tf.cos(emb)], axis=-1)
 
-    # idx = tf.range(half_dim, dtype=DEFAULT_DTYPE)
-    # emb = tf.pow(tf.cast(self.max_position, dtype=DEFAULT_DTYPE),
-    #              2 * idx / self.dim)
-    # emb = tf.cast(pos, dtype=DEFAULT_DTYPE)[:, None] / emb[None, :]
-
-    # # TODO: Remove reshaping.
-    # sin = tf.sin(emb)[..., tf.newaxis]
-    # cos = tf.cos(emb)[..., tf.newaxis]
-    # emb = tf.reshape(tf.concat([sin, cos], axis=-1), [emb.shape[0], -1])
-
     emb = self.dense_1(emb)
     emb = self.act_fn(emb)
     emb = self.dense_2(emb)
     return emb
+
+
+class PreGroupNorm(layers.Layer):
+
+  def __init__(self, func, groups=1):
+    super(PreGroupNorm, self).__init__()
+    self.func = func
+    self.norm = layers.GroupNormalization(groups, epsilon=1e-05)
+
+  def call(self, x):
+    x = self.norm(x)
+    x = self.func(x)
+    return x
+
+
+class Residual(layers.Layer):
+
+  def __init__(self, func):
+    super(Residual, self).__init__()
+    self.func = func
+
+  def call(self, x, *args, **kwargs):
+    return x + self.func(x, *args, **kwargs)
 
 
 class Attention(layers.Layer):
@@ -181,7 +197,7 @@ class UpDownBlock(layers.Layer):
 
     self.res_block = ResidualBlockWithTimeEmbedding(in_channels, out_channels)
     if has_attn:
-      self.attn = Attention(out_channels)
+      self.attn = Residual(PreGroupNorm(Attention(out_channels)))
     else:
       self.attn = Identity()
 

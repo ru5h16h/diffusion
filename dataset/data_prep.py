@@ -33,7 +33,7 @@ def de_normalize(image: tf.Tensor) -> tf.Tensor:
 def get_datasets():
   # Load the dataset with "train" split only.
   dataset_name = configs.cfg["data_cfg", "dataset"]
-  tf_dataset = tfds.load(name=dataset_name, split="train", as_supervised=True)
+  tf_dataset = tfds.load(name=dataset_name, split="test", as_supervised=True)
 
   # Preprocess data.
   tf_dataset = tf_dataset.map(lambda image, _: reshape_and_rescale(image),
