@@ -1,3 +1,5 @@
+"""Module for handling configurations."""
+
 import datetime
 import os
 import string
@@ -9,12 +11,18 @@ cfg = None
 
 
 def get_current_ts():
+  """Gets current timestamp."""
   return datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
 
 
 class Configs(dict):
+  """Custom Dictionary to use it for accessing configurations.
 
-  def __init__(self, path):
+  Attributes:
+    path: Path to the configuration file.
+  """
+
+  def __init__(self, path: str):
     self.path = path
     self.load_yaml()
 
@@ -59,3 +67,7 @@ class Configs(dict):
     config_path = os.path.join(config_dir, "configs.yaml")
     with open(config_path, 'w') as yaml_file:
       yaml.dump(self, yaml_file)
+
+
+if __name__ == "__main__":
+  sys.exit("Intended for import.")

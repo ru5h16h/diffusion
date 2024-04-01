@@ -4,8 +4,9 @@ dump_cfg_path: "experiments/${timestamp}"
 default_dtype: "float32"
 
 data_cfg:
-  dataset: "mnist"
-  img_size: 32
+  dataset: "imagenet_resized/64x64"
+  img_size: 64
+  split: "validation"
 
 diffusion_cfg:
   max_time_steps: 500
@@ -19,8 +20,8 @@ train_cfg:
   teacher_checkpoint:
     directory: "experiments/20240319T105244/checkpoints"
     max_to_keep: 2
-  batch_size: 32
-  epochs: 20
+  batch_size: 24
+  epochs: 1000
   checkpoint:
     directory: "experiments/${timestamp}/checkpoints"
     max_to_keep: 2
@@ -36,9 +37,9 @@ train_cfg:
       - false
       - true
       - true
-    out_channels: 1
+    out_channels: 3
     n_blocks: 2
-  sample_every: 1200
+  sample_every: 1500
   train_logs_dir: "experiments/${timestamp}/logs"
   patience: 10
 
@@ -46,3 +47,9 @@ infer_cfg:
   gif_dir: "experiments/${timestamp}/generated_data/gifs"
   png_dir: "experiments/${timestamp}/generated_data/pngs"
   only_last: True
+
+eval_cfg:
+  metric: "fid"
+  n_images_approx: 1000
+  gen_dir: "experiments/20240330T124336/generated_data/eval"
+  img_size: 299

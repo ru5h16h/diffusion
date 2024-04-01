@@ -1,3 +1,5 @@
+"""Model related classes and functions."""
+
 import tensorflow as tf
 from tensorflow.keras import layers as tf_layers
 
@@ -101,9 +103,9 @@ class UNetWithAttention(tf.keras.Model):
 
     return decoder_layers
 
-  def call(self, ft, time_steps):
+  def call(self, ft, step_t):
     # Get the time embeddings.
-    time_emb = self.time_nn(time_steps)
+    time_emb = self.time_nn(step_t)
 
     # Pass through initial convolutional layer.
     # TODO: Decrease the number of output channels for initial convolution.
@@ -142,11 +144,15 @@ class UNetWithAttention(tf.keras.Model):
     self.loss_metric.reset_states()
 
   @tf.function
-  def train_step(self, data, time_steps):
+  def train_step(self, data, step_t):
     x_t, gt = data
     with tf.GradientTape() as tape:
-      pred = self(ft=x_t, time_steps=time_steps, training=True)
+      pred = self(ft=x_t, step_t=step_t, training=True)
       loss = self.loss_fn(gt=gt, pred=pred)
     gradients = tape.gradient(loss, self.trainable_variables)
     self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
     self.loss_metric(loss)
+
+
+if __name__ == "__main__":
+  sys.exit("Intended for import.")

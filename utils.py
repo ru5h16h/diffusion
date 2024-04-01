@@ -1,3 +1,5 @@
+"""Common utility functions."""
+
 import sys
 import time
 
@@ -20,10 +22,12 @@ def profile(func):
 
 
 def get_default_dtype():
+  """Returns the default data type specified in the configurations."""
   return tf.as_dtype(configs.cfg["default_dtype"])
 
 
 def get_input_shape():
+  """Returns the shape of image batch that will be using in training."""
   batch = configs.cfg["train_cfg", "batch_size"]
   img_size = configs.cfg["data_cfg", "img_size"]
   img_channels = configs.cfg["train_cfg", "model", "out_channels"]

@@ -31,38 +31,34 @@ def train(
   logs_dir = configs.cfg["train_cfg", "train_logs_dir"]
   summary_writer = tf.summary.create_file_writer(logs_dir)
 
-  rng = tf.random.Generator.from_seed(configs.cfg["seed"])
-  data_len = len(tf_dataset)
   epochs = configs.cfg["train_cfg", "epochs"]
   sample_every = configs.cfg["train_cfg", "sample_every"]
   patience = configs.cfg["train_cfg", "patience"]
-  max_time_steps = configs.cfg["diffusion_cfg", "max_time_steps"]
-  min_loss = float("inf")
+  max_t = configs.cfg["diffusion_cfg", "max_time_steps"]
 
+  rng = tf.random.Generator.from_seed(configs.cfg["seed"])
+  data_len = len(tf_dataset)
+  min_loss = float("inf")
   for epoch in range(epochs):
 
     bar = tf.keras.utils.Progbar(len(tf_dataset))
     for idx, batch in enumerate(iter(tf_dataset)):
       # Generate random time steps for each image in the batch.
-      time_steps = rng.uniform(
+      step_t = rng.uniform(
           shape=(batch.shape[0],),
           minval=1,
-          maxval=max_time_steps + 1,
+          maxval=max_t + 1,
           dtype=tf.int32,
       )
-      # Get noised data using forward process.
-      data = diff_model.forward_process(x_0=batch, step_t=time_steps)
+      # Get noisy data using forward process.
+      data = diff_model.forward_process(x_0=batch, step_t=step_t)
       # Perform train step.
-      unet_model.train_step(data=data, time_steps=time_steps)
+      unet_model.train_step(data, step_t)
 
-      # Infer after appropriate steps.
+      # Infer after certain steps.
       step = epoch * data_len + idx
       if step % sample_every == 0 and step > 0:
-        infer.infer(
-            unet_model=unet_model,
-            diff_model=diff_model,
-            out_file_id=step,
-        )
+        infer.infer(unet_model, diff_model, out_file_id=str(step))
       bar.update(idx)
 
     loss = unet_model.loss_metric.result()
@@ -81,7 +77,6 @@ def train(
     if stop_ctr == patience:
       logging.info("Reached training saturation.")
       break
-
     unet_model.reset_metric_states()
 
 
@@ -105,12 +100,7 @@ def main():
 
   # Load dataset.
   tf_dataset = data_prep.get_datasets()
-  train(
-      tf_dataset=tf_dataset,
-      unet_model=unet_model,
-      diff_model=diff_model,
-      ckpt_manager=ckpt_manager,
-  )
+  train(tf_dataset, unet_model, diff_model, ckpt_manager)
 
 
 if __name__ == "__main__":

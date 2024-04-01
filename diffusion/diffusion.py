@@ -65,11 +65,11 @@ class Diffusion:
     self.x_0_var = (self.beta * self.neg_alpha_bar_prev) / self.neg_alpha_bar
 
     self.sqrt_alpha_bar = tf.sqrt(self.alpha_bar)
-    self.neg_sqrt_alpha_bar = tf.sqrt(self.neg_alpha_bar)
+    self.sqrt_neg_alpha_bar = tf.sqrt(self.neg_alpha_bar)
 
     self.snr = self.alpha_bar / self.neg_alpha_bar
 
-    self.eps_coeff_ddpm = self.beta / self.neg_sqrt_alpha_bar
+    self.eps_coeff_ddpm = self.beta / self.sqrt_neg_alpha_bar
 
     self.x_t_coeff_ddpm = self.neg_alpha_bar_prev * self.sqrt_alpha_bar
     self.x_0_coeff_ddpm = self.beta * self.sqrt_alpha_bar_prev
@@ -79,6 +79,7 @@ class Diffusion:
 
   def enforce_zero_terminal_snr(self):
     """Enforces zero terminal SNR for the schedule."""
+    # TODO: Include this.
     # Convert betas to alphas_bar_sqrt
     alphas = 1 - self.beta
     alphas_bar = tf.math.cumprotf.linspace(
@@ -107,12 +108,40 @@ class Diffusion:
 
   def _gather(self, tf_array: tf.Tensor, indices: tf.Tensor):
     """Returns tensor after `gather`-ing and adding dimensions."""
-    tf_array_at_t = tf.gather(tf_array, indices)
-    return tf_array_at_t[:, tf.newaxis, tf.newaxis, tf.newaxis]
+    return tf.gather(tf_array, indices)[:, tf.newaxis, tf.newaxis, tf.newaxis]
 
   def get_noise(self, shape: Tuple[int, ...]) -> tf.Tensor:
     """Returns Gaussian noise tensor of given shape."""
     return self.rng.normal(shape=shape, mean=0.0, stddev=1.0)
+
+  def get_mean_and_variance(self, step_t: tf.Tensor) -> tf.Tensor:
+    return (self._gather(self.sqrt_alpha_bar,
+                         step_t), self._gather(self.sqrt_neg_alpha_bar, step_t))
+
+  def eps_from_x_0(self, x_0: tf.Tensor, x_t: tf.Tensor, step_t: tf.Tensor):
+    mean, variance = self.get_mean_and_variance(step_t=step_t)
+    return (x_t - mean * x_0) / variance
+
+  def eps_from_vel(self, vel: tf.Tensor, x_t: tf.Tensor, step_t: tf.Tensor):
+    mean, variance = self.get_mean_and_variance(step_t=step_t)
+    return mean * vel + variance * x_t
+
+  def x_0_from_eps(self, eps: tf.Tensor, x_t: tf.Tensor, step_t: tf.Tensor):
+    mean, variance = self.get_mean_and_variance(step_t=step_t)
+    return (x_t - variance * eps) / mean
+
+  def x_0_from_vel(self, vel: tf.Tensor, x_t: tf.Tensor, step_t: tf.Tensor):
+    mean, variance = self.get_mean_and_variance(step_t=step_t)
+    return mean * x_t - variance * vel
+
+  def vel_from_eps_and_x_0(
+      self,
+      eps: tf.Tensor,
+      x_0: tf.Tensor,
+      step_t: tf.Tensor,
+  ) -> tf.Tensor:
+    mean, variance = self.get_mean_and_variance(step_t=step_t)
+    return mean * eps - variance * x_0
 
   def forward_process(
       self,
@@ -126,17 +155,15 @@ class Diffusion:
       step_t: The time step for each image in the batch.
     
     Returns:
-      data: The tuple of x_t and noise or x_0.
+      data: The tuple of x_t and noise or x_0 or velocity.
     """
     # Compute mean component.
-    sqrt_alpha_bar = self._gather(self.sqrt_alpha_bar, step_t)
-    mean_comp = sqrt_alpha_bar * x_0
-
+    sqrt_alpha_bar_t = self._gather(self.sqrt_alpha_bar, step_t)
+    mean_comp = sqrt_alpha_bar_t * x_0
     # Compute variance componenet.
     noise = self.get_noise(shape=x_0.shape)
-    neg_sqrt_alpha_bar = self._gather(self.neg_sqrt_alpha_bar, step_t)
-    var_comp = neg_sqrt_alpha_bar * noise
-
+    sqrt_neg_alpha_bar_t = self._gather(self.sqrt_neg_alpha_bar, step_t)
+    var_comp = sqrt_neg_alpha_bar_t * noise
     # Get the final noisy batch.
     x_t = mean_comp + var_comp
 
@@ -146,13 +173,13 @@ class Diffusion:
     elif self.pred_type == "x_0":
       data = (x_t, x_0)
     elif self.pred_type == "v":
-      vel = sqrt_alpha_bar * noise - neg_sqrt_alpha_bar * x_0
+      vel = self.vel_from_eps_and_x_0(eps=noise, x_0=x_0, step_t=step_t)
       data = (x_t, vel)
     else:
       raise ValueError(f"Invalid pred type: {self.pred_type}")
     return data
 
-  def reverse_process_ddpm(
+  def reverse_step_ddpm(
       self,
       x_t: tf.Tensor,
       model_output: tf.Tensor,
@@ -168,41 +195,27 @@ class Diffusion:
     Returns:
       x_t_minus_1: The image after one iteration of noise removal.
     """
-    # TODO: Simplify this.
-    noise = self.get_noise(shape=x_t.shape)
-
     if self.pred_type == "eps":
-      # Compute the mean component.
-      pred_coeff = self._gather(self.eps_coeff_ddpm, step_t)
-      self.eps_coeff_ddpm = self.beta / self.neg_sqrt_alpha_bar
-      inv_sqrt_alpha = self._gather(self.inv_sqrt_alpha, step_t)
-      mean_comp = inv_sqrt_alpha * (x_t - pred_coeff * model_output)
-      # Compute the variance component.
-      sqrt_beta = self._gather(self.sqrt_beta, step_t)
-      var_comp = sqrt_beta * noise
-
+      pred_eps = model_output
     elif self.pred_type == "x_0":
-      # Compute the mean component.
-      x_0_coeff_ddpm = self._gather(self.x_0_coeff_ddpm, step_t)
-      mean_coeff_ddpm = self._gather(self.mean_coeff_ddpm, step_t - 1)
-      x_t_coeff_ddpm = self._gather(self.x_t_coeff_ddpm, step_t)
-      mean_comp = (x_t_coeff_ddpm * x_t +
-                   x_0_coeff_ddpm * model_output) * mean_coeff_ddpm
-      # Compute the variance component.
-      x_0_var = self._gather(self.x_0_var, step_t)
-      var_comp = x_0_var * noise
-
+      pred_eps = self.eps_from_x_0(x_0=model_output, x_t=x_t, step_t=step_t)
     elif self.pred_type == "v":
-      # TODO: Implement this.
-      pass
-
+      pred_eps = self.eps_from_vel(vel=model_output, x_t=x_t, step_t=step_t)
     else:
-      raise NotImplementedError(f"{self.pred_type} not implemented.")
+      raise ValueError(f"Invalid pred type {self.pred_type}.")
+
+    noise = self.get_noise(shape=x_t.shape)
+    # Compute the mean component.
+    eps_coeff_ddpm_t = self._gather(self.eps_coeff_ddpm, step_t)
+    inv_sqrt_alpha_t = self._gather(self.inv_sqrt_alpha, step_t)
+    mean_comp = inv_sqrt_alpha_t * (x_t - eps_coeff_ddpm_t * pred_eps)
+    # Compute the variance component.
+    var_comp = self._gather(self.sqrt_beta, step_t) * noise
 
     x_t_minus_1 = mean_comp + var_comp
     return x_t_minus_1
 
-  def reverse_process_ddim(
+  def reverse_step_ddim(
       self,
       x_t: tf.Tensor,
       model_output: tf.Tensor,
@@ -220,27 +233,24 @@ class Diffusion:
     Returns:
       x_t_minus_1: The image after one iteration of noise removal.
     """
-    sqrt_alpha_bar = self._gather(self.sqrt_alpha_bar, step_t)
-    neg_sqrt_alpha_bar = self._gather(self.neg_sqrt_alpha_bar, step_t)
-
     sqrt_alpha_bar_t_minus_1 = self._gather(self.sqrt_alpha_bar, step_t_minus_1)
-    neg_sqrt_alpha_bar_t_minus_1 = self._gather(self.neg_sqrt_alpha_bar,
+    sqrt_neg_alpha_bar_t_minus_1 = self._gather(self.sqrt_neg_alpha_bar,
                                                 step_t_minus_1)
 
     if self.pred_type == "eps":
-      pred_x_0 = (x_t - neg_sqrt_alpha_bar * model_output) / sqrt_alpha_bar
+      pred_x_0 = self.x_0_from_eps(eps=model_output, x_t=x_t, step_t=step_t)
       pred_eps = model_output
     elif self.pred_type == "x_0":
       pred_x_0 = model_output
-      pred_eps = (x_t - sqrt_alpha_bar * model_output) / neg_sqrt_alpha_bar
+      pred_eps = self.eps_from_x_0(x_0=model_output, x_t=x_t, step_t=step_t)
     elif self.pred_type == "v":
-      pred_x_0 = sqrt_alpha_bar * x_t - neg_sqrt_alpha_bar * model_output
-      pred_eps = sqrt_alpha_bar * model_output + neg_sqrt_alpha_bar * x_t
+      pred_x_0 = self.x_0_from_vel(vel=model_output, x_t=x_t, step_t=step_t)
+      pred_eps = self.eps_from_vel(vel=model_output, x_t=x_t, step_t=step_t)
     else:
       raise ValueError(f"Invalid pred type {self.pred_type}.")
 
     x_t_minus_1 = (sqrt_alpha_bar_t_minus_1 * pred_x_0 +
-                   neg_sqrt_alpha_bar_t_minus_1 * pred_eps)
+                   sqrt_neg_alpha_bar_t_minus_1 * pred_eps)
     return x_t_minus_1
 
   def get_snr_diff(self, step_t):
@@ -248,25 +258,29 @@ class Diffusion:
             self._gather(self.snr, step_t)) / 2.0
 
   def get_distillation_target(self, x_t, step_t, x_t_minus_2, step_t_minus_2):
-    sqrt_alpha_bar_t_minus_2 = self._gather(self.sqrt_alpha_bar, step_t_minus_2)
     sqrt_alpha_bar_t = self._gather(self.sqrt_alpha_bar, step_t)
+    sqrt_neg_alpha_bar_t = self._gather(self.sqrt_neg_alpha_bar, step_t)
 
-    neg_sqrt_alpha_bar_t_minus_2 = self._gather(self.neg_sqrt_alpha_bar,
+    sqrt_alpha_bar_t_minus_2 = self._gather(self.sqrt_alpha_bar, step_t_minus_2)
+    sqrt_neg_alpha_bar_t_minus_2 = self._gather(self.sqrt_neg_alpha_bar,
                                                 step_t_minus_2)
-    neg_sqrt_alpha_bar_t = self._gather(self.neg_sqrt_alpha_bar, step_t)
 
-    var_ratio = neg_sqrt_alpha_bar_t_minus_2 / neg_sqrt_alpha_bar_t
+    var_ratio = sqrt_neg_alpha_bar_t_minus_2 / sqrt_neg_alpha_bar_t
     num = x_t_minus_2 - var_ratio * x_t
     den = sqrt_alpha_bar_t_minus_2 - var_ratio * sqrt_alpha_bar_t
     pred_x_0 = num / den
-    pred_eps = (x_t - sqrt_alpha_bar_t * pred_x_0) / neg_sqrt_alpha_bar_t
+    pred_eps = self.eps_from_x_0(x_0=pred_x_0, x_t=x_t, step_t=step_t)
 
     if self.pred_type == "x_0":
       return pred_x_0
     elif self.pred_type == "eps":
       return pred_eps
     elif self.pred_type == "v":
-      return sqrt_alpha_bar_t * pred_eps - neg_sqrt_alpha_bar_t * pred_x_0
+      return self.vel_from_eps_and_x_0(eps=pred_eps,
+                                       x_0=pred_x_0,
+                                       step_t=step_t)
+    else:
+      raise ValueError(f"Invalid pred type {self.pred_type}.")
 
 
 if __name__ == "__main__":

@@ -49,19 +49,25 @@ def get_coord(idx, jdx, height, width):
   return row_s, col_s, row_e, col_e
 
 
-def get_gif_path(step: Union[str, int]) -> str:
+def get_gif_path(step: str) -> str:
   gif_dir = configs.cfg["infer_cfg", "gif_dir"]
   os.makedirs(gif_dir, exist_ok=True)
   return os.path.join(gif_dir, f"{step}.gif")
 
 
-def get_png_path(step: Union[str, int]) -> str:
+def get_png_path(step: str) -> str:
   png_dir = configs.cfg["infer_cfg", "png_dir"]
   os.makedirs(png_dir, exist_ok=True)
   return os.path.join(png_dir, f"{step}.png")
 
 
-def store_gif(sequence: List[np.ndarray], step: Union[str, int]) -> None:
+def get_eval_dir() -> str:
+  eval_dir = configs.cfg["eval_cfg", "gen_dir"]
+  os.makedirs(eval_dir, exist_ok=True)
+  return eval_dir
+
+
+def store_gif(sequence: List[np.ndarray], step: str) -> None:
   _, width, height, channels = sequence[0].shape
   f_width, f_height, num_cols, num_rows = get_canvas_dim(sequence=sequence)
 
@@ -86,11 +92,7 @@ def store_gif(sequence: List[np.ndarray], step: Union[str, int]) -> None:
   imageio.mimsave(gif_path, final_seq, fps=10)
 
 
-def store_jpeg(
-    sequence: List[np.ndarray],
-    step: Union[str, int],
-    only_last: bool,
-) -> None:
+def store_jpeg(sequence: List[np.ndarray], step: str, only_last: bool) -> None:
   _, width, height, _ = sequence[0].shape
   f_sub_img_shape = (height, width, 3)
   f_width, f_height, num_cols, num_rows = get_canvas_dim(
@@ -120,7 +122,7 @@ def infer(
     unet_model: model.UNetWithAttention,
     diff_model: diffusion.Diffusion,
     inference_steps: int = None,
-    out_file_id: Union[str, int] = "predict",
+    out_file_id: str = "predict",
 ):
   """Inference of diffusion model.
   
@@ -131,14 +133,16 @@ def infer(
     inference steps: Number of inference steps.
     out_file_id: The ID of output file.
   """
-  max_time_steps = configs.cfg["diffusion_cfg", "max_time_steps"]
   if not inference_steps:
     # It isn't None when distilling the model.
     inference_steps = configs.cfg["diffusion_cfg", "inference_steps"]
   # TODO: Debug why starting with max_time_steps is not working. It works when
   #   inferences starts with max_time_steps - 1.
-  step_size = max_time_steps // inference_steps
-  rem = (max_time_steps - 1) % inference_steps
+  # TODO: Confirm and debug the weird generation when inference_steps is
+  #   divisible may max_time_steps.
+  max_t = configs.cfg["diffusion_cfg", "max_time_steps"]
+  step_size = max_t // inference_steps
+  rem = (max_t - 1) % inference_steps
   step_sizes = [step_size + 1] * rem + [step_size] * (inference_steps - rem)
   time_seq = list(itertools.accumulate(step_sizes))
 
@@ -154,18 +158,18 @@ def infer(
     # Same time steps for all images in batch.
     step_t = tf.fill((shape[0],), ts)
     # Get predicted noise.
-    model_output = unet_model(model_input, time_steps=step_t)
+    model_output = unet_model(ft=model_input, step_t=step_t)
 
     # Remove noise.
     if sampling_process == "ddpm":
-      model_input = diff_model.reverse_process_ddpm(
+      model_input = diff_model.reverse_step_ddpm(
           x_t=model_input,
           model_output=model_output,
           step_t=step_t,
       )
     elif sampling_process == "ddim":
       step_t_minus_1 = step_t - ts_size
-      model_input = diff_model.reverse_process_ddim(
+      model_input = diff_model.reverse_step_ddim(
           x_t=model_input,
           model_output=model_output,
           step_t=step_t,
@@ -178,12 +182,19 @@ def infer(
     to_gif.append(data_prep.de_normalize(model_input).numpy())
     bar.update(idx + 1)
 
-  store_gif(sequence=to_gif, step=out_file_id)
-  store_jpeg(
-      sequence=to_gif,
-      step=out_file_id,
-      only_last=configs.cfg["infer_cfg", "only_last"],
-  )
+  if out_file_id.startswith("eval"):
+    eval_dir = get_eval_dir()
+    batch = to_gif[-1].astype(np.uint8)
+    for idx, image in enumerate(batch):
+      image_path = os.path.join(eval_dir, f"{out_file_id}_{idx}.png")
+      imageio.imwrite(image_path, image)
+  else:
+    store_gif(sequence=to_gif, step=out_file_id)
+    store_jpeg(
+        sequence=to_gif,
+        step=out_file_id,
+        only_last=configs.cfg["infer_cfg", "only_last"],
+    )
 
 
 def main():
