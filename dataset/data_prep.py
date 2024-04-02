@@ -8,7 +8,6 @@ import utils
 def configure_for_performance(ds: tf.data):
   ds = ds.cache()
   ds = ds.shuffle(buffer_size=1000)
-  ds = ds.repeat()
   ds = ds.batch(configs.cfg["train_cfg", "batch_size"])
   ds = ds.prefetch(buffer_size=tf.data.AUTOTUNE)
   return ds

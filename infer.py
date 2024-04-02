@@ -52,23 +52,26 @@ def get_coord(idx, jdx, height, width):
 
 def get_gif_path(step: str) -> str:
   gif_dir = configs.cfg["infer_cfg", "gif_dir"]
-  os.makedirs(gif_dir, exist_ok=True)
   sampling_process = configs.cfg["diffusion_cfg", "sampling_process"]
-  return os.path.join(gif_dir, sampling_process, f"{step}.gif")
+  gif_dir = os.path.join(gif_dir, sampling_process)
+  os.makedirs(gif_dir, exist_ok=True)
+  return os.path.join(gif_dir, f"{step}.gif")
 
 
 def get_png_path(step: str) -> str:
   png_dir = configs.cfg["infer_cfg", "png_dir"]
-  os.makedirs(png_dir, exist_ok=True)
   sampling_process = configs.cfg["diffusion_cfg", "sampling_process"]
-  return os.path.join(png_dir, sampling_process, f"{step}.png")
+  png_dir = os.path.join(png_dir, sampling_process)
+  os.makedirs(png_dir, exist_ok=True)
+  return os.path.join(png_dir, f"{step}.png")
 
 
 def get_ind_dir() -> str:
   ind_dir = configs.cfg["infer_cfg", "ind_dir"]
   sampling_process = configs.cfg["diffusion_cfg", "sampling_process"]
+  ind_dir = os.path.join(ind_dir, sampling_process)
   os.makedirs(ind_dir, exist_ok=True)
-  return os.path.join(ind_dir, sampling_process)
+  return ind_dir
 
 
 def store_gif(sequence: List[np.ndarray], step: str) -> None:
