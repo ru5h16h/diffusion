@@ -5,12 +5,13 @@ import itertools
 import logging
 import math
 import os
-from typing import List, Tuple, Union
+from typing import List, Tuple
 
 from PIL import Image
 import imageio
 import numpy as np
 import tensorflow as tf
+import tqdm
 
 import configs
 from dataset import data_prep
@@ -61,10 +62,10 @@ def get_png_path(step: str) -> str:
   return os.path.join(png_dir, f"{step}.png")
 
 
-def get_eval_dir() -> str:
-  eval_dir = configs.cfg["eval_cfg", "gen_dir"]
-  os.makedirs(eval_dir, exist_ok=True)
-  return eval_dir
+def get_ind_dir() -> str:
+  ind_dir = configs.cfg["infer_cfg", "ind_dir"]
+  os.makedirs(ind_dir, exist_ok=True)
+  return ind_dir
 
 
 def store_gif(sequence: List[np.ndarray], step: str) -> None:
@@ -182,19 +183,18 @@ def infer(
     to_gif.append(data_prep.de_normalize(model_input).numpy())
     bar.update(idx + 1)
 
-  if out_file_id.startswith("eval"):
-    eval_dir = get_eval_dir()
+  if configs.cfg["infer_cfg", "store_individually"]:
+    ind_dir = get_ind_dir()
     batch = to_gif[-1].astype(np.uint8)
     for idx, image in enumerate(batch):
-      image_path = os.path.join(eval_dir, f"{out_file_id}_{idx}.png")
+      image_path = os.path.join(ind_dir, f"{out_file_id}_{idx}.png")
       imageio.imwrite(image_path, image)
-  else:
-    store_gif(sequence=to_gif, step=out_file_id)
-    store_jpeg(
-        sequence=to_gif,
-        step=out_file_id,
-        only_last=configs.cfg["infer_cfg", "only_last"],
-    )
+  store_gif(sequence=to_gif, step=out_file_id)
+  store_jpeg(
+      sequence=to_gif,
+      step=out_file_id,
+      only_last=configs.cfg["infer_cfg", "only_last"],
+  )
 
 
 def main():
@@ -219,7 +219,10 @@ def main():
   else:
     raise ValueError("Checkpoint not present.")
 
-  infer(unet_model=unet_model, diff_model=diff_model)
+  batch_size = configs.cfg["train_cfg", "batch_size"]
+  count = (configs.cfg["infer_cfg", "n_images_approx"] // batch_size) or 1
+  for idx in tqdm.tqdm(range(count)):
+    infer(unet_model, diff_model, out_file_id=f"pred_{idx}")
 
 
 if __name__ == "__main__":

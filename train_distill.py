@@ -174,7 +174,7 @@ def main():
     raise ValueError("Checkpoint not present.")
 
   tf_dataset = data_prep.get_datasets()
-  train_distill(tf_dataset, teacher_model, diff_model)
+  train_distill(tf_dataset, diff_model, teacher_model)
 
 
 if __name__ == "__main__":

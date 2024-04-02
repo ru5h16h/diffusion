@@ -1,15 +1,15 @@
 seed: 49
 
-dump_cfg_path: "experiments/${timestamp}"
+dump_cfg_path: "experiments/20240401T234207"
 default_dtype: "float32"
 
 data_cfg:
-  dataset: "imagenet_resized/64x64"
-  img_size: 64
-  split: "validation"
+  dataset: "cifar10"
+  img_size: 32
+  split: "train"
 
 diffusion_cfg:
-  max_time_steps: 1000
+  max_time_steps: 500
   sampling_process: "ddim"
   inference_steps: 32
   pred_type: "v"
@@ -20,10 +20,10 @@ train_cfg:
   teacher_checkpoint:
     directory: "experiments/20240319T105244/checkpoints"
     max_to_keep: 2
-  batch_size: 64
+  batch_size: 256
   epochs: 1000
   checkpoint:
-    directory: "experiments/${timestamp}/checkpoints"
+    directory: "experiments/20240401T234207/checkpoints"
     max_to_keep: 2
   model:
     n_channels: 64
@@ -40,16 +40,13 @@ train_cfg:
     out_channels: 3
     n_blocks: 2
   sample_every: 1500
-  train_logs_dir: "experiments/${timestamp}/logs"
+  train_logs_dir: "experiments/20240330T124336/logs"
   patience: 10
 
 infer_cfg:
-  gif_dir: "experiments/${timestamp}/generated_data/gifs"
-  png_dir: "experiments/${timestamp}/generated_data/pngs"
+  gif_dir: "experiments/20240401T234207/generated_data/gifs"
+  png_dir: "experiments/20240401T234207/generated_data/pngs"
+  ind_dir: "experiments/20240401T234207/generated_data/eval"
   only_last: True
-
-eval_cfg:
-  metric: "fid"
-  n_images_approx: 1000
-  gen_dir: "experiments/20240330T124336/generated_data/eval"
-  img_size: 299
+  store_individually: True
+  n_images_approx: 10000

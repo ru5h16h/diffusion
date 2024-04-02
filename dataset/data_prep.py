@@ -13,19 +13,19 @@ def configure_for_performance(ds: tf.data):
   return ds
 
 
-def reshape_and_rescale(image: tf.Tensor, for_eval: bool) -> tf.Tensor:
+def normalize(image: tf.Tensor) -> tf.Tensor:
+  # Apply standard normalization.
+  dtype = utils.get_default_dtype()
+  return tf.cast(image, dtype) / 127.5 - 1
+
+
+def reshape_and_rescale(image: tf.Tensor) -> tf.Tensor:
   # Reshape image if required.
-  if for_eval:
-    img_size = configs.cfg["eval_cfg", "img_size"]
-  else:
-    img_size = configs.cfg["data_cfg", "img_size"]
+  img_size = configs.cfg["data_cfg", "img_size"]
   height, width, _ = image.shape
   if (height, width) != (img_size, img_size):
     image = tf.image.resize(image, (img_size, img_size))
-
-  # Apply standard normalization.
-  dtype = utils.get_default_dtype()
-  image = tf.cast(image, dtype) / 127.5 - 1
+  image = normalize(image)
   return image
 
 
@@ -33,7 +33,7 @@ def de_normalize(image: tf.Tensor) -> tf.Tensor:
   return tf.cast((image + 1) * 127.5, tf.uint8)
 
 
-def get_datasets(for_eval: bool = False):
+def get_datasets():
   # Load the dataset with "train" split only.
   dataset_name = configs.cfg["data_cfg", "dataset"]
   split = configs.cfg["data_cfg", "split"]
@@ -41,7 +41,7 @@ def get_datasets(for_eval: bool = False):
 
   # Preprocess data.
   tf_dataset = tf_dataset.map(
-      lambda image, _: reshape_and_rescale(image, for_eval),
+      lambda image, _: reshape_and_rescale(image),
       num_parallel_calls=tf.data.AUTOTUNE,
   )
   tf_dataset = configure_for_performance(tf_dataset)

@@ -100,7 +100,7 @@ def main():
 
   # Load dataset.
   tf_dataset = data_prep.get_datasets()
-  train(tf_dataset, unet_model, diff_model, ckpt_manager)
+  train(tf_dataset, diff_model, unet_model, ckpt_manager)
 
 
 if __name__ == "__main__":
