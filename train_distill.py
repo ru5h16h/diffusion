@@ -143,6 +143,7 @@ def train_distill(
     teacher_steps //= 2
     teacher_step_size = max_t // teacher_steps
     student_steps = teacher_steps // 2
+    student_ckpt.restore(student_ckpt_manager.latest_checkpoint)
     teacher_model.set_weights(student_model.get_weights())
 
 
