@@ -44,9 +44,9 @@ train_cfg:
   patience: 10
 
 infer_cfg:
-  gif_dir: "experiments/20240401T234207/generated_data/gifs"
-  png_dir: "experiments/20240401T234207/generated_data/pngs"
-  ind_dir: "experiments/20240401T234207/generated_data/eval"
+  gif_dir: "experiments/20240401T234207/generated_data/${timestamp}/gifs"
+  png_dir: "experiments/20240401T234207/generated_data/${timestamp}/pngs"
+  ind_dir: "experiments/20240401T234207/generated_data/${timestamp}/eval"
   only_last: True
   store_individually: True
   n_images_approx: 10000

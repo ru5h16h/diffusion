@@ -5,6 +5,7 @@ import itertools
 import logging
 import math
 import os
+import time
 from typing import List, Tuple
 
 from PIL import Image
@@ -145,12 +146,16 @@ def infer(
     inference_steps = configs.cfg["diffusion_cfg", "inference_steps"]
   # TODO: Debug why starting with max_time_steps is not working. It works when
   #   inferences starts with max_time_steps - 1.
-  # TODO: Confirm and debug the weird generation when inference_steps is
-  #   divisible may max_time_steps.
   max_t = configs.cfg["diffusion_cfg", "max_time_steps"]
   step_size = max_t // inference_steps
   rem = (max_t - 1) % inference_steps
-  step_sizes = [step_size + 1] * rem + [step_size] * (inference_steps - rem)
+  init_step_size = step_size + 1 if max_t % inference_steps != 0 else step_size
+  step_sizes = [init_step_size] * rem + [step_size] * (inference_steps - rem)
+  if max_t % inference_steps == 0:
+    if step_sizes[-1] != 1:
+      step_sizes[-1] -= 1
+    else:
+      del step_sizes[-1]
   time_seq = list(itertools.accumulate(step_sizes))
 
   # Generate noise to infer a given batch.
@@ -160,6 +165,7 @@ def infer(
   sampling_process = configs.cfg["diffusion_cfg", "sampling_process"]
   bar = tf.keras.utils.Progbar(len(time_seq))
   to_gif = []
+  st_time = time.time()
   # Iterate backward in time for reverse process.
   for idx, (ts, ts_size) in enumerate(list(zip(time_seq, step_sizes))[::-1]):
     # Same time steps for all images in batch.
@@ -188,6 +194,7 @@ def infer(
     # Make list to gif.
     to_gif.append(data_prep.de_normalize(model_input).numpy())
     bar.update(idx + 1)
+  logging.info(f"Time taken for generation: {time.time() - st_time: 0.3f}")
 
   if configs.cfg["infer_cfg", "store_individually"]:
     ind_dir = get_ind_dir()
