@@ -253,9 +253,9 @@ class Diffusion:
                    sqrt_neg_alpha_bar_t_minus_1 * pred_eps)
     return x_t_minus_1
 
-  def get_snr_diff(self, step_t):
-    return (self._gather(self.snr, step_t - 1) -
-            self._gather(self.snr, step_t)) / 2.0
+  def get_loss_weight(self, step_t):
+    snr_t = self._gather(self.snr, step_t)
+    return snr_t / (snr_t + 1)
 
   def get_distillation_target(self, x_t, step_t, x_t_minus_2, step_t_minus_2):
     sqrt_alpha_bar_t = self._gather(self.sqrt_alpha_bar, step_t)

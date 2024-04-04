@@ -12,6 +12,17 @@ import infer
 from model import model
 
 
+def get_weight_t(diff_model: diffusion.Diffusion, step_t: tf.Tensor):
+  """Returns the weight as per given configurations."""
+  weight_strategy = configs.cfg["train_cfg", "weight_strategy"]
+  if weight_strategy == "const":
+    return 1.0
+  elif weight_strategy == "snr":
+    return diff_model.get_loss_weight(step_t)
+  else:
+    raise ValueError("Invalid loss strategy.")
+
+
 def train(
     tf_dataset: tf.data,
     diff_model: diffusion.Diffusion,
@@ -53,7 +64,8 @@ def train(
       # Get noisy data using forward process.
       data = diff_model.forward_process(x_0=batch, step_t=step_t)
       # Perform train step.
-      unet_model.train_step(data, step_t)
+      weight_t = get_weight_t(diff_model, step_t)
+      unet_model.train_step(data, step_t, weight_t)
 
       # Infer after certain steps.
       step = epoch * data_len + idx

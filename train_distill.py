@@ -104,6 +104,7 @@ def train_distill(
             x_t_minus_2=x_t_minus_2,
             step_t_minus_2=step_t_minus_2,
         )
+        step_t_minus_2 = step_t_minus_2[:, tf.newaxis, tf.newaxis, tf.newaxis]
         target = tf.where(step_t_minus_2 == 0, x_t_minus_2, distillation_target)
         data = (x_t, target)
         # Perform train step for student model.

@@ -1,15 +1,15 @@
 seed: 49
 
-dump_cfg_path: "experiments/20240401T234207"
+dump_cfg_path: "experiments/${timestamp}"
 default_dtype: "float32"
 
 data_cfg:
-  dataset: "cifar10"
+  dataset: "mnist"
   img_size: 32
-  split: "train"
+  split: "test"
 
 diffusion_cfg:
-  max_time_steps: 500
+  max_time_steps: 1000
   sampling_process: "ddim"
   inference_steps: 32
   pred_type: "v"
@@ -20,10 +20,10 @@ train_cfg:
   teacher_checkpoint:
     directory: "experiments/20240319T105244/checkpoints"
     max_to_keep: 2
-  batch_size: 256
+  batch_size: 32
   epochs: 1000
   checkpoint:
-    directory: "experiments/20240401T234207/checkpoints"
+    directory: "experiments/${timestamp}/checkpoints"
     max_to_keep: 2
   model:
     n_channels: 64
@@ -37,16 +37,17 @@ train_cfg:
       - false
       - true
       - true
-    out_channels: 3
+    out_channels: 1
     n_blocks: 2
-  sample_every: 1500
-  train_logs_dir: "experiments/20240330T124336/logs"
+  sample_every: 500
+  train_logs_dir: "experiments/${timestamp}/logs"
   patience: 10
+  weight_strategy: "snr"
 
 infer_cfg:
-  gif_dir: "experiments/20240401T234207/generated_data/${timestamp}/gifs"
-  png_dir: "experiments/20240401T234207/generated_data/${timestamp}/pngs"
-  ind_dir: "experiments/20240401T234207/generated_data/${timestamp}/eval"
+  gif_dir: "experiments/${timestamp}/generated_data/${timestamp}/gifs"
+  png_dir: "experiments/${timestamp}/generated_data/${timestamp}/pngs"
+  ind_dir: "experiments/${timestamp}/generated_data/${timestamp}/eval"
   only_last: True
-  store_individually: True
-  n_images_approx: 10000
+  store_individually: False
+  n_images_approx: 8

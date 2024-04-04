@@ -138,18 +138,19 @@ class UNetWithAttention(tf.keras.Model):
     ft = self.final_conv(ft)
     return ft
 
-  def loss_fn(self, gt, pred):
-    return tf.math.reduce_mean((gt - pred)**2)
+  def loss_fn(self, gt, pred, weight_t):
+    return tf.math.reduce_mean(
+        tf.math.reduce_mean((gt - pred)**2, axis=[1, 2, 3]) * weight_t)
 
   def reset_metric_states(self):
     self.loss_metric.reset_states()
 
   @tf.function
-  def train_step(self, data, step_t):
+  def train_step(self, data, step_t, weight_t=1.0):
     x_t, gt = data
     with tf.GradientTape() as tape:
       pred = self(ft=x_t, step_t=step_t, training=True)
-      loss = self.loss_fn(gt=gt, pred=pred)
+      loss = self.loss_fn(gt, pred, weight_t)
     gradients = tape.gradient(loss, self.trainable_variables)
     self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
     self.loss_metric(loss)
