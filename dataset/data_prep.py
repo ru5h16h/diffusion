@@ -1,4 +1,5 @@
 import os
+import shutil
 import zipfile
 
 import tensorflow as tf
@@ -38,15 +39,37 @@ def de_normalize(image: tf.Tensor) -> tf.Tensor:
 
 def get_celeb_a(zip_file_path: str) -> tf.data:
   zip_dir = os.path.dirname(zip_file_path)
-
   with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
     data_dir = os.path.join(zip_dir, os.path.splitext(zip_ref.filename)[0])
-    if len(os.listdir(data_dir)) != 202599:
+    if not os.path.exists(data_dir):
       zip_ref.extractall(zip_dir)
+
+  file_names = os.listdir(data_dir)
+  eval_samples = 10000
+  train_samples = len(file_names) - eval_samples
+
+  train_dir = os.path.join(data_dir, "train")
+  if (not os.path.exists(train_dir) or
+      len(os.listdir(train_dir)) != train_samples):
+    os.makedirs(train_dir, exist_ok=True)
+    for idx in range(1, train_samples + 1):
+      file_name = f"{idx:06d}.jpg"
+      src = os.path.join(data_dir, file_name)
+      dst = os.path.join(train_dir, file_name)
+      shutil.move(src, dst)
+
+  eval_dir = os.path.join(data_dir, "eval")
+  if not os.path.exists(eval_dir) or len(os.listdir(eval_dir)) != eval_samples:
+    os.makedirs(eval_dir, exist_ok=True)
+    for idx in range(train_samples + 1, train_samples + eval_samples + 1):
+      file_name = f"{idx:06d}.jpg"
+      src = os.path.join(data_dir, file_name)
+      dst = os.path.join(eval_dir, file_name)
+      shutil.move(src, dst)
 
   img_size = configs.cfg["data_cfg", "img_size"]
   tf_dataset = tf.keras.preprocessing.image_dataset_from_directory(
-      directory=data_dir,
+      directory=train_dir,
       labels=None,
       image_size=(img_size, img_size),
       batch_size=None,
