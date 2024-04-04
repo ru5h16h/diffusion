@@ -1,3 +1,6 @@
+import os
+import zipfile
+
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
@@ -33,16 +36,41 @@ def de_normalize(image: tf.Tensor) -> tf.Tensor:
   return tf.cast((image + 1) * 127.5, tf.uint8)
 
 
+def get_celeb_a(zip_file_path: str) -> tf.data:
+  zip_dir = os.path.dirname(zip_file_path)
+
+  with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
+    data_dir = os.path.join(zip_dir, os.path.splitext(zip_ref.filename)[0])
+    if len(os.listdir(data_dir)) != 202599:
+      zip_ref.extractall(zip_dir)
+
+  img_size = configs.cfg["data_cfg", "img_size"]
+  tf_dataset = tf.keras.preprocessing.image_dataset_from_directory(
+      directory=data_dir,
+      labels=None,
+      image_size=(img_size, img_size),
+      batch_size=None,
+  )
+  tf_dataset = tf_dataset.map(
+      lambda image: normalize(image),
+      num_parallel_calls=tf.data.AUTOTUNE,
+  )
+  return tf_dataset
+
+
 def get_datasets():
   # Load the dataset with "train" split only.
   dataset_name = configs.cfg["data_cfg", "dataset"]
   split = configs.cfg["data_cfg", "split"]
-  tf_dataset = tfds.load(name=dataset_name, split=split, as_supervised=True)
-
-  # Preprocess data.
-  tf_dataset = tf_dataset.map(
-      lambda image, _: reshape_and_rescale(image),
-      num_parallel_calls=tf.data.AUTOTUNE,
-  )
+  if dataset_name == "celeb_a":
+    data_path = configs.cfg["data_cfg", "data_path"]
+    tf_dataset = get_celeb_a(zip_file_path=data_path)
+  else:
+    tf_dataset = tfds.load(name=dataset_name, split=split, as_supervised=True)
+    # Preprocess data.
+    tf_dataset = tf_dataset.map(
+        lambda image, _: reshape_and_rescale(image),
+        num_parallel_calls=tf.data.AUTOTUNE,
+    )
   tf_dataset = configure_for_performance(tf_dataset)
   return tf_dataset

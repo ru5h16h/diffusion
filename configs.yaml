@@ -4,9 +4,10 @@ dump_cfg_path: "experiments/${timestamp}"
 default_dtype: "float32"
 
 data_cfg:
-  dataset: "mnist"
-  img_size: 32
-  split: "test"
+  dataset: "celeb_a"
+  img_size: 128
+  split: "train"
+  zip_file_path: "img_align_celeba.zip"
 
 diffusion_cfg:
   max_time_steps: 1000
@@ -20,7 +21,7 @@ train_cfg:
   teacher_checkpoint:
     directory: "experiments/20240319T105244/checkpoints"
     max_to_keep: 2
-  batch_size: 32
+  batch_size: 128
   epochs: 1000
   checkpoint:
     directory: "experiments/${timestamp}/checkpoints"
@@ -32,12 +33,14 @@ train_cfg:
       - 2
       - 4
       - 8
+      - 16
     is_attn:
       - false
       - false
+      - false
       - true
       - true
-    out_channels: 1
+    out_channels: 3
     n_blocks: 2
   sample_every: 500
   train_logs_dir: "experiments/${timestamp}/logs"
