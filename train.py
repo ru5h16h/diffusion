@@ -42,6 +42,10 @@ def train(
   logs_dir = configs.cfg["train_cfg", "train_logs_dir"]
   summary_writer = tf.summary.create_file_writer(logs_dir)
 
+  if ckpt_manager.latest_checkpoint:
+    start_epoch = int(ckpt_manager.latest_checkpoint.split(sep='ckpt-')[-1])
+  else:
+    start_epoch = 0
   epochs = configs.cfg["train_cfg", "epochs"]
   sample_every = configs.cfg["train_cfg", "sample_every"]
   patience = configs.cfg["train_cfg", "patience"]
@@ -50,7 +54,7 @@ def train(
   rng = tf.random.Generator.from_seed(configs.cfg["seed"])
   data_len = len(tf_dataset)
   min_loss = float("inf")
-  for epoch in range(epochs):
+  for epoch in range(start_epoch, epochs):
 
     bar = tf.keras.utils.Progbar(len(tf_dataset))
     for idx, batch in enumerate(iter(tf_dataset)):
@@ -108,6 +112,13 @@ def main():
   ckpt = tf.train.Checkpoint(unet_model=unet_model)
   ckpt_configs = configs.cfg["train_cfg", "checkpoint"]
   ckpt_manager = tf.train.CheckpointManager(checkpoint=ckpt, **ckpt_configs)
+  if ckpt_manager.latest_checkpoint:
+    # TODO: Resolve the "Value in checkpoint could not be found in the
+    #  restored object" warning.
+    ckpt.restore(ckpt_manager.latest_checkpoint).expect_partial()
+    logging.info("Restored from {}".format(ckpt_manager.latest_checkpoint))
+  else:
+    logging.info("Starting training from scratch.")
   logging.info(f"Checkpoint dir: {ckpt_configs['directory']}")
 
   # Load dataset.
