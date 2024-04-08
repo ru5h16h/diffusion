@@ -49,11 +49,13 @@ def train(
   epochs = configs.cfg["train_cfg", "epochs"]
   sample_every = configs.cfg["train_cfg", "sample_every"]
   patience = configs.cfg["train_cfg", "patience"]
+  precision = configs.cfg["train_cfg", "precision"]
   max_t = configs.cfg["diffusion_cfg", "max_time_steps"]
 
   rng = tf.random.Generator.from_seed(configs.cfg["seed"])
   data_len = len(tf_dataset)
   min_loss = float("inf")
+  prev_loss = float("inf")
   for epoch in range(start_epoch, epochs):
 
     bar = tf.keras.utils.Progbar(len(tf_dataset))
@@ -84,7 +86,7 @@ def train(
 
     # Save the model with minimum training loss.
     # TODO: Do this based on validation score.
-    if loss < min_loss:
+    if loss < min_loss and prev_loss - loss > precision:
       ckpt_manager.save(checkpoint_number=epoch)
       min_loss = loss
       stop_ctr = 0
@@ -93,6 +95,7 @@ def train(
     if stop_ctr == patience:
       logging.info("Reached training saturation.")
       break
+    prev_loss = loss
     unet_model.reset_metric_states()
 
 

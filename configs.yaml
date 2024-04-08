@@ -45,6 +45,7 @@ train_cfg:
   sample_every: 500
   train_logs_dir: "experiments/${timestamp}/logs"
   patience: 5
+  precision: 0.000075
   weight_strategy: "snr"
 
 infer_cfg:
