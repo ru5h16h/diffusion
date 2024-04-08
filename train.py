@@ -82,7 +82,7 @@ def train(
     loss = unet_model.loss_metric.result()
     with summary_writer.as_default():
       tf.summary.scalar("loss", loss, step=epoch)
-    logging.info(f"Average loss for epoch {epoch + 1}/{epochs}: {loss: 0.4f}")
+    logging.info(f"Average loss for epoch {epoch + 1}/{epochs}: {loss: 0.6f}")
 
     # Save the model with minimum training loss.
     # TODO: Do this based on validation score.

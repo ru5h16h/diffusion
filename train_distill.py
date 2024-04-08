@@ -74,11 +74,13 @@ def train_distill(
   epochs = configs.cfg["train_cfg", "epochs"]
   sample_every = configs.cfg["train_cfg", "sample_every"]
   patience = configs.cfg["train_cfg", "patience"]
+  precision = configs.cfg["train_cfg", "precision"]
 
   data_len = len(tf_dataset)
   while student_steps >= 4:
 
     min_loss = float("inf")
+    prev_loss = float("inf")
     for epoch in range(epochs):
 
       bar = tf.keras.utils.Progbar(data_len - 1)
@@ -142,11 +144,11 @@ def train_distill(
       loss = student_model.loss_metric.result()
       with summary_writer.as_default():
         tf.summary.scalar("loss", loss, step=epoch)
-      logging.info(f"Average loss for epoch {epoch + 1}/{epochs}: {loss: 0.4f}")
+      logging.info(f"Average loss for epoch {epoch + 1}/{epochs}: {loss: 0.6f}")
 
       # Save the model with minimum training loss.
       # TODO: Do this based on validation score.
-      if loss < min_loss:
+      if loss < min_loss and prev_loss - loss > precision:
         student_ckpt_manager.save(checkpoint_number=epoch)
         min_loss = loss
         stop_ctr = 0
@@ -155,6 +157,7 @@ def train_distill(
       if stop_ctr == patience:
         logging.info("Reached training saturation.")
         break
+      prev_loss = loss
       student_model.reset_metric_states()
 
     teacher_steps //= 2
