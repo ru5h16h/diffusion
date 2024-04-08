@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Progressive distillation of the original model."""
 
+import copy
 import logging
 
+from skimage import transform
 import tensorflow as tf
 
 import configs
@@ -11,6 +13,20 @@ from diffusion import diffusion
 import infer
 from model import model
 import utils
+
+
+def set_student_weights(
+    teacher_model: model.UNetWithAttention,
+    student_model: model.UNetWithAttention,
+):
+  for idx in range(len(teacher_model.layers)):
+    weights = teacher_model.layers[idx].get_weights()
+    s_weights = student_model.layers[idx].get_weights()
+    weights = [
+        transform.resize(wt, s_wt.shape)
+        for wt, s_wt in zip(weights, s_weights)
+    ]
+    student_model.layers[idx].set_weights(weights)
 
 
 def train_distill(
@@ -43,7 +59,7 @@ def train_distill(
   #   get_weights on teacher model.
   teacher_model(tf.zeros(shape), tf.zeros((shape[0])))
   student_model(tf.zeros(shape), tf.zeros((shape[0])))
-  student_model.set_weights(teacher_model.get_weights())
+  set_student_weights(teacher_model, student_model)
 
   # Initialize teacher and student step count.
   max_t = configs.cfg["diffusion_cfg", "max_time_steps"]
@@ -145,7 +161,7 @@ def train_distill(
     teacher_step_size = max_t // teacher_steps
     student_steps = teacher_steps // 2
     student_ckpt.restore(student_ckpt_manager.latest_checkpoint)
-    teacher_model.set_weights(student_model.get_weights())
+    set_student_weights(teacher_model, student_model)
 
 
 def main():
@@ -158,11 +174,14 @@ def main():
   diff_model = diffusion.Diffusion(seed=seed, **configs.cfg["diffusion_cfg"])
 
   # Load UNet model.
-  teacher_model = model.UNetWithAttention(**configs.cfg["train_cfg", "model"])
+  teacher_cfg = copy.deepcopy(configs.cfg["train_cfg", "model"])
+  teacher_cfg["n_channels"] = configs.cfg["train_cfg", "teacher_cfg",
+                                          "n_channels"]
+  teacher_model = model.UNetWithAttention(**teacher_cfg)
 
   # Load teacher model checkpoint
   teacher_ckpt = tf.train.Checkpoint(unet_model=teacher_model)
-  ckpt_configs = configs.cfg["train_cfg", "teacher_checkpoint"]
+  ckpt_configs = configs.cfg["train_cfg", "teacher_cfg", "teacher_checkpoint"]
   teacher_ckpt_manager = tf.train.CheckpointManager(checkpoint=teacher_ckpt,
                                                     **ckpt_configs)
   if teacher_ckpt_manager.latest_checkpoint:

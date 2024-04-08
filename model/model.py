@@ -1,5 +1,6 @@
 """Model related classes and functions."""
 import sys
+from typing import List
 
 import tensorflow as tf
 from tensorflow.keras import layers as tf_layers
@@ -12,11 +13,11 @@ class UNetWithAttention(tf.keras.Model):
 
   def __init__(
       self,
-      n_channels=64,
-      channel_mults=[1, 2, 4],
-      is_attn=[False, True, True],
-      out_channels=1,
-      n_blocks=2,
+      n_channels: int,
+      channel_mults: List[bool],
+      is_attn: List[bool],
+      out_channels: int,
+      n_blocks: int,
   ):
     super(UNetWithAttention, self).__init__()
     self.n_blocks = n_blocks
