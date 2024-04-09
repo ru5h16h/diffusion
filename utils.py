@@ -39,7 +39,6 @@ def parse_args():
   parser = argparse.ArgumentParser()
   parser.add_argument(
       "--configs",
-      required=True,
       type=str,
       default="configs.yaml",
   )
