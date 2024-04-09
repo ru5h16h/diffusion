@@ -53,6 +53,8 @@ def get_coord(idx, jdx, height, width):
 
 def get_gif_path(step: str) -> str:
   gif_dir = configs.cfg["infer_cfg", "gif_dir"]
+  if not gif_dir:
+    return ""
   sampling_process = configs.cfg["diffusion_cfg", "sampling_process"]
   gif_dir = os.path.join(gif_dir, sampling_process)
   os.makedirs(gif_dir, exist_ok=True)
@@ -76,6 +78,10 @@ def get_ind_dir() -> str:
 
 
 def store_gif(sequence: List[np.ndarray], step: str) -> None:
+  gif_path = get_gif_path(step=step)
+  if not gif_path:
+    return
+
   _, width, height, channels = sequence[0].shape
   f_width, f_height, num_cols, num_rows = get_canvas_dim(sequence=sequence)
 
@@ -96,7 +102,6 @@ def store_gif(sequence: List[np.ndarray], step: str) -> None:
         canvas.paste(image, (col_s, row_s))
     final_seq.append(canvas)
 
-  gif_path = get_gif_path(step=step)
   imageio.mimsave(gif_path, final_seq, fps=10)
 
 
@@ -194,7 +199,8 @@ def infer(
     # Make list to gif.
     to_gif.append(data_prep.de_normalize(model_input).numpy())
     bar.update(idx + 1)
-  logging.info(f"Time taken for generation: {time.time() - st_time: 0.3f}")
+  time_taken = time.time() - st_time
+  logging.info(f"Time taken for generation: {time_taken:0.3f}")
 
   if configs.cfg["infer_cfg", "store_individually"]:
     ind_dir = get_ind_dir()
@@ -208,6 +214,7 @@ def infer(
       step=out_file_id,
       only_last=configs.cfg["infer_cfg", "only_last"],
   )
+  return time_taken
 
 
 def main():
@@ -234,8 +241,13 @@ def main():
 
   batch_size = configs.cfg["train_cfg", "batch_size"]
   count = (configs.cfg["infer_cfg", "n_images_approx"] // batch_size) or 1
+  times = []
   for idx in tqdm.tqdm(range(count)):
-    infer(unet_model, diff_model, out_file_id=f"pred_{idx}")
+    times.append(infer(unet_model, diff_model, out_file_id=f"pred_{idx}"))
+  if len(times) > 1:
+    times = times[1:]
+    avg_time = np.average(times)
+    logging.info(f"Average time over {count} inferences: {avg_time:0.3f}.")
 
 
 if __name__ == "__main__":
