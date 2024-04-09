@@ -10,6 +10,7 @@ from dataset import data_prep
 from diffusion import diffusion
 import infer
 from model import model
+import utils
 
 
 def get_weight_t(diff_model: diffusion.Diffusion, step_t: tf.Tensor):
@@ -101,7 +102,9 @@ def train(
 
 def main():
   """The entry point of the training."""
-  configs.cfg = configs.Configs(path="configs.yaml")
+  args = utils.parse_args()
+  configs.cfg = configs.Configs(path=args.configs)
+  logging.info(f"Using configs: {args.configs}.")
   configs.cfg.dump_config()
 
   # Load diffusion model.

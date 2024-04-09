@@ -169,7 +169,9 @@ def train_distill(
 
 def main():
   """Entry point of Progressive dsitillation."""
-  configs.cfg = configs.Configs(path="configs.yaml")
+  args = utils.parse_args()
+  configs.cfg = configs.Configs(path=args.configs)
+  logging.info(f"Using configs: {args.configs}.")
   configs.cfg.dump_config()
 
   # Load diffusion model.

@@ -1,5 +1,6 @@
 """Common utility functions."""
 
+import argparse
 import sys
 import time
 
@@ -32,6 +33,17 @@ def get_input_shape():
   img_size = configs.cfg["data_cfg", "img_size"]
   img_channels = configs.cfg["train_cfg", "model", "out_channels"]
   return (batch, img_size, img_size, img_channels)
+
+
+def parse_args():
+  parser = argparse.ArgumentParser()
+  parser.add_argument(
+      "--configs",
+      required=True,
+      type=str,
+      default="configs.yaml",
+  )
+  return parser.parse_args()
 
 
 if __name__ == "__main__":
