@@ -240,7 +240,8 @@ def main():
     raise ValueError("Checkpoint not present.")
 
   batch_size = configs.cfg["train_cfg", "batch_size"]
-  count = (configs.cfg["infer_cfg", "n_images_approx"] // batch_size) or 1
+  n_images_approx = configs.cfg["infer_cfg", "n_images_approx"]
+  count = math.ceil(n_images_approx / batch_size) or 1
   times = []
   for idx in tqdm.tqdm(range(count)):
     times.append(infer(unet_model, diff_model, out_file_id=f"pred_{idx}"))
