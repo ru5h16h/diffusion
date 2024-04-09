@@ -52,36 +52,30 @@ def get_coord(idx, jdx, height, width):
 
 
 def get_gif_path(step: str) -> str:
-  gif_dir = configs.cfg["infer_cfg", "gif_dir"]
-  if not gif_dir:
-    return ""
+  gen_dir = configs.cfg["infer_cfg", "gen_dir"]
   sampling_process = configs.cfg["diffusion_cfg", "sampling_process"]
-  gif_dir = os.path.join(gif_dir, sampling_process)
+  gif_dir = os.path.join(gen_dir, "gif", sampling_process)
   os.makedirs(gif_dir, exist_ok=True)
   return os.path.join(gif_dir, f"{step}.gif")
 
 
 def get_png_path(step: str) -> str:
-  png_dir = configs.cfg["infer_cfg", "png_dir"]
+  gen_dir = configs.cfg["infer_cfg", "gen_dir"]
   sampling_process = configs.cfg["diffusion_cfg", "sampling_process"]
-  png_dir = os.path.join(png_dir, sampling_process)
+  png_dir = os.path.join(gen_dir, "png", sampling_process)
   os.makedirs(png_dir, exist_ok=True)
   return os.path.join(png_dir, f"{step}.png")
 
 
 def get_ind_dir() -> str:
-  ind_dir = configs.cfg["infer_cfg", "ind_dir"]
+  gen_dir = configs.cfg["infer_cfg", "gen_dir"]
   sampling_process = configs.cfg["diffusion_cfg", "sampling_process"]
-  ind_dir = os.path.join(ind_dir, sampling_process)
+  ind_dir = os.path.join(gen_dir, "eval", sampling_process)
   os.makedirs(ind_dir, exist_ok=True)
   return ind_dir
 
 
 def store_gif(sequence: List[np.ndarray], step: str) -> None:
-  gif_path = get_gif_path(step=step)
-  if not gif_path:
-    return
-
   _, width, height, channels = sequence[0].shape
   f_width, f_height, num_cols, num_rows = get_canvas_dim(sequence=sequence)
 
@@ -208,12 +202,14 @@ def infer(
     for idx, image in enumerate(batch):
       image_path = os.path.join(ind_dir, f"{out_file_id}_{idx}.png")
       imageio.imwrite(image_path, image)
-  store_gif(sequence=to_gif, step=out_file_id)
-  store_jpeg(
-      sequence=to_gif,
-      step=out_file_id,
-      only_last=configs.cfg["infer_cfg", "only_last"],
-  )
+  if configs.cfg["infer_cfg", "store_gif"]:
+    store_gif(sequence=to_gif, step=out_file_id)
+  if configs.cfg["infer_cfg", "store_collage"]:
+    store_jpeg(
+        sequence=to_gif,
+        step=out_file_id,
+        only_last=configs.cfg["infer_cfg", "only_last"],
+    )
   return time_taken
 
 
@@ -241,6 +237,9 @@ def main():
   else:
     raise ValueError("Checkpoint not present.")
 
+  gen_dir = configs.cfg["infer_cfg", "gen_dir"]
+  logging.info(f"Storing generations at {gen_dir}.")
+
   batch_size = configs.cfg["train_cfg", "batch_size"]
   n_images_approx = configs.cfg["infer_cfg", "n_images_approx"]
   count = math.ceil(n_images_approx / batch_size) or 1
@@ -251,6 +250,9 @@ def main():
     times = times[1:]
     avg_time = np.average(times)
     logging.info(f"Average time over {count} inferences: {avg_time:0.3f}.")
+
+  trainable_params_count = unet_model.count_params()
+  logging.info(f"Trainable parameter count: {trainable_params_count}.")
 
 
 if __name__ == "__main__":
