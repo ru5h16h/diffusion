@@ -3,6 +3,7 @@
 
 import copy
 import logging
+import os
 
 from skimage import transform
 import tensorflow as tf
@@ -42,15 +43,26 @@ def train_distill(
       function related to diffusion process.
     teacher_model: The teacher model used for distillation.
   """
+  # Initialize teacher and student step count.
+  max_t = configs.cfg["diffusion_cfg", "max_time_steps"]
+  teacher_steps = configs.cfg["diffusion_cfg", "inference_steps"]
+  teacher_step_size = max_t // teacher_steps
+  student_steps = int(teacher_steps // 2)
+
   # Load UNet model.
   student_model = model.UNetWithAttention(**configs.cfg["train_cfg", "model"])
 
   # Create checkpoint manager.
   student_ckpt = tf.train.Checkpoint(unet_model=student_model)
-  ckpt_configs = configs.cfg["train_cfg", "checkpoint"]
-  student_ckpt_manager = tf.train.CheckpointManager(checkpoint=student_ckpt,
-                                                    **ckpt_configs)
-  logging.info(f"Checkpoint dir: {ckpt_configs['directory']}")
+  max_to_keep = configs.cfg["train_cfg", "checkpoint", "max_to_keep"]
+  ckpt_dir_root = configs.cfg["train_cfg", "checkpoint", "directory"]
+  ckpt_dir = os.path.join(ckpt_dir_root, f"{student_steps}")
+  student_ckpt_manager = tf.train.CheckpointManager(
+      checkpoint=student_ckpt,
+      directory=ckpt_dir,
+      max_to_keep=max_to_keep,
+  )
+  logging.info(f"Checkpoint dir: {ckpt_dir}.")
 
   shape = utils.get_input_shape()
   # TODO: Debug: ValueError: Weights for model 'time_nn_init' have not yet
@@ -60,12 +72,6 @@ def train_distill(
   teacher_model(tf.zeros(shape), tf.zeros((shape[0])))
   student_model(tf.zeros(shape), tf.zeros((shape[0])))
   set_student_weights(teacher_model, student_model)
-
-  # Initialize teacher and student step count.
-  max_t = configs.cfg["diffusion_cfg", "max_time_steps"]
-  teacher_steps = configs.cfg["diffusion_cfg", "inference_steps"]
-  teacher_step_size = max_t // teacher_steps
-  student_steps = teacher_steps // 2
 
   # Create summary writer.
   logs_dir = configs.cfg["train_cfg", "train_logs_dir"]
@@ -162,9 +168,17 @@ def train_distill(
 
     teacher_steps //= 2
     teacher_step_size = max_t // teacher_steps
-    student_steps = teacher_steps // 2
+    student_steps = int(teacher_steps // 2)
     student_ckpt.restore(student_ckpt_manager.latest_checkpoint)
     set_student_weights(teacher_model, student_model)
+
+    ckpt_dir = os.path.join(ckpt_dir_root, f"{student_steps}")
+    student_ckpt_manager = tf.train.CheckpointManager(
+        checkpoint=student_ckpt,
+        directory=ckpt_dir,
+        max_to_keep=max_to_keep,
+    )
+    logging.info(f"Checkpoint dir: {ckpt_dir}.")
 
 
 def main():
