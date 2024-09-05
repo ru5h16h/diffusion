@@ -3,6 +3,7 @@ cfg = {
         "dataset": "cifar10",
     },
     "train_cfg": {
+        "batch_size": 128,
         'epochs': 500,
         "model": {
             'out_channels': 3,

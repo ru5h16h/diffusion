@@ -5,6 +5,7 @@ import argparse
 import logging
 
 import tensorflow as tf
+import tqdm
 
 import configs
 from dataset import data_prep
@@ -127,7 +128,7 @@ def train(
   rng = tf.random.Generator.from_seed(cfg["seed"])
   for epoch in range(start_epoch, epochs):
 
-    bar = tf.keras.utils.Progbar(data_len)
+    p_bar = tqdm.tqdm(total=data_len, position=0, leave=True)
     for idx, batch in enumerate(iter(tf_dataset)):
       # Generate random time steps for each image in the batch.
       step_t = rng.uniform(
@@ -146,7 +147,7 @@ def train(
       step = epoch * data_len + idx
       if step % sample_every == 0 and step > 0:
         infer.infer(unet_model, diff_model, cfg, out_file_id=str(step))
-      bar.update(idx)
+      p_bar.update(1)
 
     loss = unet_model.loss_metric.result()
     with summary_writer.as_default():
