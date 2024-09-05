@@ -32,6 +32,7 @@ def set_student_weights(
 
 def train_distill(
     tf_dataset: tf.data,
+    data_len: int,
     diff_model: diffusion.Diffusion,
     teacher_model: model.UNetWithAttention,
 ):
@@ -82,7 +83,6 @@ def train_distill(
   patience = configs.cfg["train_cfg", "patience"]
   precision = configs.cfg["train_cfg", "precision"]
 
-  data_len = len(tf_dataset)
   while student_steps >= 4:
 
     min_loss = float("inf")
@@ -213,8 +213,8 @@ def main():
   else:
     raise ValueError("Checkpoint not present.")
 
-  tf_dataset = data_prep.get_datasets()
-  train_distill(tf_dataset, diff_model, teacher_model)
+  tf_dataset, data_len = data_prep.get_datasets()
+  train_distill(tf_dataset, data_len, diff_model, teacher_model)
 
 
 if __name__ == "__main__":

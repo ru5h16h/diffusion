@@ -88,12 +88,17 @@ def get_datasets():
   if dataset_name == "celeb_a":
     data_path = configs.cfg["data_cfg", "data_path"]
     tf_dataset = get_celeb_a(zip_file_path=data_path)
+    data_len = len(tf_dataset)
   else:
     tf_dataset = tfds.load(name=dataset_name, split=split, as_supervised=True)
+    filter_classes = configs.cfg["data_cfg", "filter_classes"]
+    tf_dataset = tf_dataset.filter(lambda image, label: tf.reduce_any(
+        [tf.math.equal(label, cl) for cl in filter_classes]))
+    data_len = len([_ for _ in tf_dataset])
     # Preprocess data.
     tf_dataset = tf_dataset.map(
         lambda image, _: reshape_and_rescale(image),
         num_parallel_calls=tf.data.AUTOTUNE,
     )
   tf_dataset = configure_for_performance(tf_dataset)
-  return tf_dataset
+  return tf_dataset, data_len

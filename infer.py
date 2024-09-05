@@ -8,9 +8,9 @@ import os
 import time
 from typing import List, Tuple
 
-from PIL import Image
 import imageio
 import numpy as np
+from PIL import Image
 import tensorflow as tf
 import tqdm
 

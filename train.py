@@ -26,6 +26,7 @@ def get_weight_t(diff_model: diffusion.Diffusion, step_t: tf.Tensor):
 
 def train(
     tf_dataset: tf.data,
+    data_len: int,
     diff_model: diffusion.Diffusion,
     unet_model: model.UNetWithAttention,
     ckpt_manager: tf.train.CheckpointManager,
@@ -54,12 +55,11 @@ def train(
   max_t = configs.cfg["diffusion_cfg", "max_time_steps"]
 
   rng = tf.random.Generator.from_seed(configs.cfg["seed"])
-  data_len = len(tf_dataset)
   min_loss = float("inf")
   prev_loss = float("inf")
   for epoch in range(start_epoch, epochs):
 
-    bar = tf.keras.utils.Progbar(len(tf_dataset))
+    bar = tf.keras.utils.Progbar(data_len)
     for idx, batch in enumerate(iter(tf_dataset)):
       # Generate random time steps for each image in the batch.
       step_t = rng.uniform(
@@ -128,8 +128,8 @@ def main():
   logging.info(f"Checkpoint dir: {ckpt_configs['directory']}")
 
   # Load dataset.
-  tf_dataset = data_prep.get_datasets()
-  train(tf_dataset, diff_model, unet_model, ckpt_manager)
+  tf_dataset, data_len = data_prep.get_datasets()
+  train(tf_dataset, data_len, diff_model, unet_model, ckpt_manager)
 
 
 if __name__ == "__main__":

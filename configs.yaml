@@ -8,6 +8,10 @@ data_cfg:
   img_size: 32
   split: "test"
   data_path: "img_align_celeba.zip"
+    filter_classes:
+      - 0
+      - 5
+      - 9
 
 diffusion_cfg:
   max_time_steps: 1000

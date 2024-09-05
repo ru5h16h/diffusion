@@ -1,5 +1,6 @@
-import einops
 import math
+
+import einops
 import tensorflow as tf
 from tensorflow.keras import layers
 
