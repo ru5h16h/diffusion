@@ -65,7 +65,7 @@ def train(
       step_t = rng.uniform(
           shape=(batch.shape[0],),
           minval=1,
-          maxval=max_t + 1,
+          maxval=max_t,
           dtype=tf.int32,
       )
       # Get noisy data using forward process.
@@ -93,7 +93,7 @@ def train(
       stop_ctr = 0
     else:
       stop_ctr += 1
-    if stop_ctr == patience:
+    if patience != -1 and stop_ctr == patience:
       logging.info("Reached training saturation.")
       break
     prev_loss = loss

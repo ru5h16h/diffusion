@@ -48,7 +48,7 @@ train_cfg:
     n_blocks: 2
   sample_every: 500
   train_logs_dir: "experiments/20240404T053853/logs"
-  patience: 5
+  patience: -1
   precision: 0.000075
   weight_strategy: "snr"
 

@@ -55,7 +55,7 @@ class UNetWithAttention(tf.keras.Model):
     )
 
     # Define optimizer for training process.
-    self.optimizer = tf.keras.optimizers.AdamW(learning_rate=tf.Variable(1e-4))
+    self.optimizer = tf.keras.optimizers.AdamW(learning_rate=1e-4)
     self.loss_metric = tf.keras.metrics.Mean("train_loss", dtype=tf.float32)
 
   def get_encoder_layers(self):
@@ -144,7 +144,7 @@ class UNetWithAttention(tf.keras.Model):
         tf.math.reduce_mean((gt - pred)**2, axis=[1, 2, 3]) * weight_t)
 
   def reset_metric_states(self):
-    self.loss_metric.reset_states()
+    self.loss_metric.reset_state()
 
   @tf.function
   def train_step(self, data, step_t, weight_t=1.0):
