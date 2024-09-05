@@ -1,12 +1,14 @@
 """Common utility functions."""
 
 import argparse
+import datetime
+import functools
+import json
+import os
 import sys
 import time
 
 import tensorflow as tf
-
-import configs
 
 
 def profile(func):
@@ -22,16 +24,16 @@ def profile(func):
   return wrapper
 
 
-def get_default_dtype():
+def get_default_dtype(cfg):
   """Returns the default data type specified in the configurations."""
-  return tf.as_dtype(configs.cfg["default_dtype"])
+  return tf.as_dtype(cfg["default_dtype"])
 
 
-def get_input_shape():
+def get_input_shape(cfg):
   """Returns the shape of image batch that will be using in training."""
-  batch = configs.cfg["train_cfg", "batch_size"]
-  img_size = configs.cfg["data_cfg", "img_size"]
-  img_channels = configs.cfg["train_cfg", "model", "out_channels"]
+  batch = cfg["train_cfg", "batch_size"]
+  img_size = cfg["data_cfg", "img_size"]
+  img_channels = cfg["train_cfg", "model", "out_channels"]
   return (batch, img_size, img_size, img_channels)
 
 
@@ -43,6 +45,40 @@ def parse_args():
       default="configs.yaml",
   )
   return parser.parse_args()
+
+
+def get_current_ts() -> str:
+  now = datetime.datetime.now()
+  timestamp = now.strftime("%Y%m%dT%H%M%S")
+  ms = now.microsecond // 1000
+  return f"{timestamp}M{ms:03d}"
+
+
+@functools.lru_cache
+def cached_makedirs(dir_path):
+  if not dir_path:
+    return
+  os.makedirs(dir_path, exist_ok=True)
+
+
+def get_path(cfg, key, **kwargs):
+  if "experiment" not in kwargs:
+    kwargs["experiment"] = cfg["experiment"]
+  path = cfg["path", key].format(**kwargs)
+  cached_makedirs(os.path.dirname(path))
+  return path
+
+
+def safe_open(path, mode):
+  if mode not in {"wb", "w"}:
+    raise ValueError("Only use safe open in write mode.")
+  os.makedirs(os.path.dirname(path), exist_ok=True)
+  return open(path, mode)
+
+
+def write_json(file_path: str, data_dict):
+  with safe_open(file_path, "w") as fp:
+    json.dump(data_dict, fp)
 
 
 if __name__ == "__main__":

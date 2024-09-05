@@ -6,6 +6,7 @@ from typing import Tuple
 import tensorflow as tf
 
 from diffusion import schedule
+import utils
 
 
 class Diffusion:
@@ -26,28 +27,18 @@ class Diffusion:
     ValueError: For invalid variance_schedule values.
   """
 
-  def __init__(
-      self,
-      max_time_steps: int,
-      variance_schedule: str,
-      pred_type: str,
-      seed: int,
-      to_enforce_zero_terminal_snr: bool = False,
-      **kwargs,
-  ):
-    self.pred_type = pred_type
-    self.max_time_steps = max_time_steps
+  def __init__(self, cfg):
+    self.pred_type = cfg["diffusion_cfg", "pred_type"]
+    self.max_time_steps = cfg["diffusion_cfg", "max_time_steps"]
 
+    variance_schedule = cfg["diffusion_cfg", "variance_schedule"]
     if variance_schedule == "linear":
       self.beta = schedule.linear(max_steps=self.max_time_steps)
     elif variance_schedule == "cosine":
       self.beta = schedule.cosine(max_steps=self.max_time_steps)
     else:
       raise ValueError(f"{variance_schedule} not supported. Must be `linear`.")
-
-    # TODO: Debug this.
-    if to_enforce_zero_terminal_snr:
-      self.enforce_zero_terminal_snr()
+    self.beta = tf.cast(self.beta, utils.get_default_dtype(cfg))
 
     self.sqrt_beta = tf.sqrt(self.beta)
 
@@ -75,7 +66,7 @@ class Diffusion:
     self.x_0_coeff_ddpm = self.beta * self.sqrt_alpha_bar_prev
     self.mean_coeff_ddpm = 1 / self.neg_alpha_bar
 
-    self.rng = tf.random.Generator.from_seed(seed)
+    self.rng = tf.random.Generator.from_seed(cfg["seed"])
 
   def enforce_zero_terminal_snr(self):
     """Enforces zero terminal SNR for the schedule."""

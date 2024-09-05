@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Module for training the diffusion model."""
 
+import argparse
 import logging
 
 import tensorflow as tf
@@ -12,10 +13,74 @@ import infer
 from model import model
 import utils
 
+_CFG = {
+    "experiment": utils.get_current_ts(),
+    "seed": 42,
+    "default_dtype": "float32",
+    "data_cfg": {
+        "dataset": "mnist",
+        "img_size": 32,
+        "split": "train",
+        "data_path": "img_align_celeba.zip",
+        "filter_classes": None,
+    },
+    "diffusion_cfg": {
+        'max_time_steps': 1000,
+        'sampling_process': 'ddim',
+        'inference_steps': 32,
+        'pred_type': 'v',
+        'variance_schedule': 'cosine',
+    },
+    "train_cfg": {
+        'batch_size': 32,
+        'epochs': 100,
+        'model': {
+            'n_channels': 32,
+            'channel_mults': [1, 2, 4, 8],
+            'is_attn': [False, False, True, True],
+            'out_channels': 1,
+            'n_blocks': 2
+        },
+        'sample_every': 1000,
+        'weight_strategy': 'snr',
+        "save_at": [50, 100],
+        "continue_training": False,
+    },
+    "infer_cfg": {
+        'only_last': True,
+        'store_individually': False,
+        'store_gif': False,
+        'store_collage': True,
+        'n_images_approx': 8
+    },
+    "path": {
+        "weights": "runs/{experiment}/weights/model_{epoch}.keras",
+        "writer": "runs/{experiment}/writer",
+        "gen_dir": "runs/{experiment}/generated_data/{experiment}",
+        "pre_trained_weights": "",
+        "configs": "runs/{experiment}/configs.json",
+    }
+}
 
-def get_weight_t(diff_model: diffusion.Diffusion, step_t: tf.Tensor):
+
+def parse_args():
+  parser = argparse.ArgumentParser()
+  parser.add_argument(
+      "--debug",
+      action="store_true",
+      help="toggles debug mode",
+  )
+  parser.add_argument(
+      "--configs",
+      type=str,
+      help="path to the configs",
+  )
+  return parser.parse_args()
+
+
+def get_weight_t(diff_model: diffusion.Diffusion, step_t: tf.Tensor, cfg):
   """Returns the weight as per given configurations."""
-  weight_strategy = configs.cfg["train_cfg", "weight_strategy"]
+  weight_strategy = cfg["train_cfg", "weight_strategy"]
   if weight_strategy == "const":
     return 1.0
   elif weight_strategy == "snr":
@@ -24,12 +89,22 @@ def get_weight_t(diff_model: diffusion.Diffusion, step_t: tf.Tensor):
     raise ValueError("Invalid loss strategy.")
 
 
+def get_start_epoch(cfg):
+  if not cfg["train_cfg", "continue_training"]:
+    return 0
+  pre_trained_path = utils.get_path(cfg, "pre_trained_weights")
+  if pre_trained_path:
+    return int(pre_trained_path.split("model_")[-1]) - 1
+  else:
+    return 0
+
+
 def train(
     tf_dataset: tf.data,
     data_len: int,
     diff_model: diffusion.Diffusion,
     unet_model: model.UNetWithAttention,
-    ckpt_manager: tf.train.CheckpointManager,
+    cfg,
 ) -> None:
   """Trains the diffusion model.
 
@@ -41,22 +116,15 @@ def train(
     ckpt_manager: The checkpoint maanger
   """
   # Create summary writer.
-  logs_dir = configs.cfg["train_cfg", "train_logs_dir"]
-  summary_writer = tf.summary.create_file_writer(logs_dir)
+  write_dir = utils.get_path(cfg, "writer")
+  summary_writer = tf.summary.create_file_writer(write_dir)
 
-  if ckpt_manager.latest_checkpoint:
-    start_epoch = int(ckpt_manager.latest_checkpoint.split(sep='ckpt-')[-1])
-  else:
-    start_epoch = 0
-  epochs = configs.cfg["train_cfg", "epochs"]
-  sample_every = configs.cfg["train_cfg", "sample_every"]
-  patience = configs.cfg["train_cfg", "patience"]
-  precision = configs.cfg["train_cfg", "precision"]
-  max_t = configs.cfg["diffusion_cfg", "max_time_steps"]
+  start_epoch = get_start_epoch(cfg)
+  epochs = cfg["train_cfg", "epochs"]
+  sample_every = cfg["train_cfg", "sample_every"]
+  max_t = cfg["diffusion_cfg", "max_time_steps"]
 
-  rng = tf.random.Generator.from_seed(configs.cfg["seed"])
-  min_loss = float("inf")
-  prev_loss = float("inf")
+  rng = tf.random.Generator.from_seed(cfg["seed"])
   for epoch in range(start_epoch, epochs):
 
     bar = tf.keras.utils.Progbar(data_len)
@@ -71,13 +139,13 @@ def train(
       # Get noisy data using forward process.
       data = diff_model.forward_process(x_0=batch, step_t=step_t)
       # Perform train step.
-      weight_t = get_weight_t(diff_model, step_t)
+      weight_t = get_weight_t(diff_model, step_t, cfg)
       unet_model.train_step(data, step_t, weight_t)
 
       # Infer after certain steps.
       step = epoch * data_len + idx
       if step % sample_every == 0 and step > 0:
-        infer.infer(unet_model, diff_model, out_file_id=str(step))
+        infer.infer(unet_model, diff_model, cfg, out_file_id=str(step))
       bar.update(idx)
 
     loss = unet_model.loss_metric.result()
@@ -86,50 +154,36 @@ def train(
     logging.info(f"Average loss for epoch {epoch + 1}/{epochs}: {loss: 0.6f}")
 
     # Save the model with minimum training loss.
-    # TODO: Do this based on validation score.
-    if loss < min_loss and prev_loss - loss > precision:
-      ckpt_manager.save(checkpoint_number=epoch)
-      min_loss = loss
-      stop_ctr = 0
-    else:
-      stop_ctr += 1
-    if patience != -1 and stop_ctr == patience:
-      logging.info("Reached training saturation.")
-      break
-    prev_loss = loss
+    model_path = utils.get_path(cfg, "weights", epoch=epoch + 1)
+    if epoch + 1 in cfg["train_cfg", "save_at"]:
+      unet_model.save(model_path)
     unet_model.reset_metric_states()
 
 
 def main():
   """The entry point of the training."""
-  args = utils.parse_args()
-  configs.cfg = configs.Configs(path=args.configs)
-  logging.info(f"Using configs: {args.configs}.")
-  configs.cfg.dump_config()
+  args = parse_args()
+  if args.debug:
+    _CFG["experiment"] = f"{_CFG['experiment']}_debug"
+
+  cfg = configs.Configs(_CFG, args.configs, args)
+  logging.info(f"Experiment: {cfg['experiment']}")
 
   # Load diffusion model.
-  seed = configs.cfg["seed"]
-  diff_model = diffusion.Diffusion(seed=seed, **configs.cfg["diffusion_cfg"])
+  diff_model = diffusion.Diffusion(cfg=cfg)
 
   # Load UNet model.
-  unet_model = model.UNetWithAttention(**configs.cfg["train_cfg", "model"])
+  unet_model = model.UNetWithAttention(**cfg["train_cfg", "model"])
 
-  # Create checkpoint manager.
-  ckpt = tf.train.Checkpoint(unet_model=unet_model)
-  ckpt_configs = configs.cfg["train_cfg", "checkpoint"]
-  ckpt_manager = tf.train.CheckpointManager(checkpoint=ckpt, **ckpt_configs)
-  if ckpt_manager.latest_checkpoint:
-    # TODO: Resolve the "Value in checkpoint could not be found in the
-    #  restored object" warning.
-    ckpt.restore(ckpt_manager.latest_checkpoint).expect_partial()
-    logging.info("Restored from {}".format(ckpt_manager.latest_checkpoint))
-  else:
-    logging.info("Starting training from scratch.")
-  logging.info(f"Checkpoint dir: {ckpt_configs['directory']}")
+  # Load weights, if given
+  pre_trained_path = utils.get_path(cfg, "pre_trained_weights")
+  if pre_trained_path:
+    unet_model.load_weights(pre_trained_path)
+    logging.info(f"Continuing from path {pre_trained_path}.")
 
   # Load dataset.
-  tf_dataset, data_len = data_prep.get_datasets()
-  train(tf_dataset, data_len, diff_model, unet_model, ckpt_manager)
+  tf_dataset, data_len = data_prep.get_datasets(cfg)
+  train(tf_dataset, data_len, diff_model, unet_model, cfg)
 
 
 if __name__ == "__main__":

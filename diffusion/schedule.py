@@ -33,4 +33,4 @@ def cosine(max_steps):
       tf.zeros_like(time_steps))
   beta = 1 - alpha_bar[1:] / alpha_bar[:-1]
   beta = tf.clip_by_value(beta, COS_BETA_START, COS_BETA_END)
-  return tf.cast(beta, utils.get_default_dtype())
+  return beta

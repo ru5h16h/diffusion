@@ -9,27 +9,27 @@ import configs
 import utils
 
 
-def configure_for_performance(ds: tf.data):
+def configure_for_performance(ds: tf.data, cfg):
   ds = ds.cache()
   ds = ds.shuffle(buffer_size=1000)
-  ds = ds.batch(configs.cfg["train_cfg", "batch_size"])
+  ds = ds.batch(cfg["train_cfg", "batch_size"])
   ds = ds.prefetch(buffer_size=tf.data.AUTOTUNE)
   return ds
 
 
-def normalize(image: tf.Tensor) -> tf.Tensor:
+def normalize(image: tf.Tensor, cfg) -> tf.Tensor:
   # Apply standard normalization.
-  dtype = utils.get_default_dtype()
+  dtype = utils.get_default_dtype(cfg)
   return tf.cast(image, dtype) / 127.5 - 1
 
 
-def reshape_and_rescale(image: tf.Tensor) -> tf.Tensor:
+def reshape_and_rescale(image: tf.Tensor, cfg) -> tf.Tensor:
   # Reshape image if required.
-  img_size = configs.cfg["data_cfg", "img_size"]
+  img_size = cfg["data_cfg", "img_size"]
   height, width, _ = image.shape
   if (height, width) != (img_size, img_size):
     image = tf.image.resize(image, (img_size, img_size))
-  image = normalize(image)
+  image = normalize(image, cfg)
   return image
 
 
@@ -81,24 +81,24 @@ def get_celeb_a(zip_file_path: str) -> tf.data:
   return tf_dataset
 
 
-def get_datasets():
+def get_datasets(cfg):
   # Load the dataset with "train" split only.
-  dataset_name = configs.cfg["data_cfg", "dataset"]
-  split = configs.cfg["data_cfg", "split"]
+  dataset_name = cfg["data_cfg", "dataset"]
+  split = cfg["data_cfg", "split"]
   if dataset_name == "celeb_a":
-    data_path = configs.cfg["data_cfg", "data_path"]
+    data_path = cfg["data_cfg", "data_path"]
     tf_dataset = get_celeb_a(zip_file_path=data_path)
-    data_len = len(tf_dataset)
   else:
     tf_dataset = tfds.load(name=dataset_name, split=split, as_supervised=True)
-    filter_classes = configs.cfg["data_cfg", "filter_classes"]
-    tf_dataset = tf_dataset.filter(lambda image, label: tf.reduce_any(
-        [tf.math.equal(label, cl) for cl in filter_classes]))
-    data_len = len([_ for _ in tf_dataset])
+    filter_classes = cfg["data_cfg", "filter_classes"]
+    if filter_classes:
+      tf_dataset = tf_dataset.filter(lambda image, label: tf.reduce_any(
+          [tf.math.equal(label, cl) for cl in filter_classes]))
     # Preprocess data.
     tf_dataset = tf_dataset.map(
-        lambda image, _: reshape_and_rescale(image),
+        lambda image, _: reshape_and_rescale(image, cfg),
         num_parallel_calls=tf.data.AUTOTUNE,
     )
-  tf_dataset = configure_for_performance(tf_dataset)
+  tf_dataset = configure_for_performance(tf_dataset, cfg)
+  data_len = len([_ for _ in tf_dataset])
   return tf_dataset, data_len

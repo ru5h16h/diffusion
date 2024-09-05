@@ -51,31 +51,31 @@ def get_coord(idx, jdx, height, width):
   return row_s, col_s, row_e, col_e
 
 
-def get_gif_path(step: str) -> str:
-  gen_dir = configs.cfg["infer_cfg", "gen_dir"]
-  sampling_process = configs.cfg["diffusion_cfg", "sampling_process"]
+def get_gif_path(step: str, cfg) -> str:
+  gen_dir = utils.get_path(cfg, "gen_dir")
+  sampling_process = cfg["diffusion_cfg", "sampling_process"]
   gif_dir = os.path.join(gen_dir, "gif", sampling_process)
   os.makedirs(gif_dir, exist_ok=True)
   return os.path.join(gif_dir, f"{step}.gif")
 
 
-def get_png_path(step: str) -> str:
-  gen_dir = configs.cfg["infer_cfg", "gen_dir"]
-  sampling_process = configs.cfg["diffusion_cfg", "sampling_process"]
+def get_png_path(step: str, cfg) -> str:
+  gen_dir = utils.get_path(cfg, "gen_dir")
+  sampling_process = cfg["diffusion_cfg", "sampling_process"]
   png_dir = os.path.join(gen_dir, "png", sampling_process)
   os.makedirs(png_dir, exist_ok=True)
   return os.path.join(png_dir, f"{step}.png")
 
 
-def get_ind_dir() -> str:
-  gen_dir = configs.cfg["infer_cfg", "gen_dir"]
-  sampling_process = configs.cfg["diffusion_cfg", "sampling_process"]
+def get_ind_dir(cfg) -> str:
+  gen_dir = utils.get_path(cfg, "gen_dir")
+  sampling_process = cfg["diffusion_cfg", "sampling_process"]
   ind_dir = os.path.join(gen_dir, "eval", sampling_process)
   os.makedirs(ind_dir, exist_ok=True)
   return ind_dir
 
 
-def store_gif(sequence: List[np.ndarray], step: str) -> None:
+def store_gif(sequence: List[np.ndarray], step: str, cfg) -> None:
   _, width, height, channels = sequence[0].shape
   f_width, f_height, num_cols, num_rows = get_canvas_dim(sequence=sequence)
 
@@ -96,10 +96,12 @@ def store_gif(sequence: List[np.ndarray], step: str) -> None:
         canvas.paste(image, (col_s, row_s))
     final_seq.append(canvas)
 
+  gif_path = get_gif_path(step, cfg)
   imageio.mimsave(gif_path, final_seq, fps=10)
 
 
-def store_jpeg(sequence: List[np.ndarray], step: str, only_last: bool) -> None:
+def store_jpeg(sequence: List[np.ndarray], step: str, only_last: bool,
+               cfg) -> None:
   _, width, height, _ = sequence[0].shape
   f_sub_img_shape = (height, width, 3)
   f_width, f_height, num_cols, num_rows = get_canvas_dim(
@@ -121,13 +123,14 @@ def store_jpeg(sequence: List[np.ndarray], step: str, only_last: bool) -> None:
       row_s, col_s, row_e, col_e = get_coord(idx, jdx, height, width)
       canvas[row_s:row_e, col_s:col_e, :] = image
 
-  png_path = get_png_path(step=step)
+  png_path = get_png_path(step, cfg)
   imageio.imwrite(png_path, canvas)
 
 
 def infer(
     unet_model: model.UNetWithAttention,
     diff_model: diffusion.Diffusion,
+    cfg,
     inference_steps: int = None,
     out_file_id: str = "predict",
 ):
@@ -142,10 +145,10 @@ def infer(
   """
   if not inference_steps:
     # It isn't None when distilling the model.
-    inference_steps = configs.cfg["diffusion_cfg", "inference_steps"]
+    inference_steps = cfg["diffusion_cfg", "inference_steps"]
   # TODO: Debug why starting with max_time_steps is not working. It works when
   #   inferences starts with max_time_steps - 1.
-  max_t = configs.cfg["diffusion_cfg", "max_time_steps"]
+  max_t = cfg["diffusion_cfg", "max_time_steps"]
   step_size = max_t // inference_steps
   rem = (max_t - 1) % inference_steps
   init_step_size = step_size + 1 if max_t % inference_steps != 0 else step_size
@@ -158,10 +161,10 @@ def infer(
   time_seq = list(itertools.accumulate(step_sizes))
 
   # Generate noise to infer a given batch.
-  shape = utils.get_input_shape()
+  shape = utils.get_input_shape(cfg)
   model_input = diff_model.get_noise(shape=shape)
 
-  sampling_process = configs.cfg["diffusion_cfg", "sampling_process"]
+  sampling_process = cfg["diffusion_cfg", "sampling_process"]
   bar = tf.keras.utils.Progbar(len(time_seq))
   to_gif = []
   st_time = time.time()
@@ -196,19 +199,20 @@ def infer(
   time_taken = time.time() - st_time
   logging.info(f"Time taken for generation: {time_taken:0.3f}")
 
-  if configs.cfg["infer_cfg", "store_individually"]:
-    ind_dir = get_ind_dir()
+  if cfg["infer_cfg", "store_individually"]:
+    ind_dir = get_ind_dir(cfg)
     batch = to_gif[-1].astype(np.uint8)
     for idx, image in enumerate(batch):
       image_path = os.path.join(ind_dir, f"{out_file_id}_{idx}.png")
       imageio.imwrite(image_path, image)
-  if configs.cfg["infer_cfg", "store_gif"]:
-    store_gif(sequence=to_gif, step=out_file_id)
-  if configs.cfg["infer_cfg", "store_collage"]:
+  if cfg["infer_cfg", "store_gif"]:
+    store_gif(sequence=to_gif, step=out_file_id, cfg=cfg)
+  if cfg["infer_cfg", "store_collage"]:
     store_jpeg(
         sequence=to_gif,
         step=out_file_id,
-        only_last=configs.cfg["infer_cfg", "only_last"],
+        only_last=cfg["infer_cfg", "only_last"],
+        cfg=cfg,
     )
   return time_taken
 

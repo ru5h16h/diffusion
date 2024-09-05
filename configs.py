@@ -1,31 +1,34 @@
-"""Module for handling configurations."""
-
-import datetime
-import os
-import string
-import sys
+import collections
 from typing import Any
 
-import yaml
-
-cfg = None
+import utils
 
 
-def get_current_ts():
-  """Gets current timestamp."""
-  return datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+def load_dict_from_file(file_path):
+  local_vars = {}
+  with open(file_path, 'r') as file:
+    exec(file.read(), {}, local_vars)
+  return local_vars.get('cfg', {})
 
 
 class Configs(dict):
-  """Custom Dictionary to use it for accessing configurations.
 
-  Attributes:
-    path: Path to the configuration file.
-  """
-
-  def __init__(self, path: str):
-    self.path = path
-    self.load_yaml()
+  def __init__(
+      self,
+      default_configs,
+      configs_path=None,
+      args=None,
+      save_configs=True,
+  ):
+    if args is not None:
+      default_configs["args"] = vars(args)
+    self.to_save_configs = save_configs
+    self.update(default_configs)
+    if configs_path:
+      cfg_args = load_dict_from_file(configs_path)
+      self.update_rec(cfg_args)
+    if self.to_save_configs:
+      self.save_configs()
 
   def __getitem__(self, __key: Any) -> Any:
     if isinstance(__key, str):
@@ -39,36 +42,32 @@ class Configs(dict):
           sub_dict = sub_dict[key]
       return sub_dict
 
-  def replace_placeholders(self, data, sub):
-    if isinstance(data, dict):
-      for key, value in data.items():
-        if isinstance(value, str):
-          data[key] = string.Template(value).safe_substitute(sub)
-        elif isinstance(value, (dict, list)):
-          self.replace_placeholders(value, sub)
-    elif isinstance(data, list):
-      for i in range(len(data)):
-        self.replace_placeholders(data[i], sub)
-    return data
+  def save_configs(self):
+    cfg_path = utils.get_path(self, "configs")
+    utils.write_json(cfg_path, self)
 
-  def load_yaml(self):
-    with open(self.path, 'r') as file:
-      content = file.read()
-    data = yaml.safe_load(content)
-    ts = get_current_ts()
-    data = self.replace_placeholders(
-        data=data,
-        sub={"timestamp": ts},
-    )
-    self.update(data)
+  def __setitem__(self, keys, value):
+    if isinstance(keys, str):
+      super().__setitem__(keys, value)
+    elif isinstance(keys, collections.abc.Iterable):
+      d = self
+      *init_keys, last_key = keys
+      for key in init_keys:
+        if key not in d:
+          d[key] = {}
+        if not isinstance(d[key], dict):
+          raise ValueError(
+              f"Key {key} is already associated with a non-dictionary value.")
+        d = d[key]
+      d[last_key] = value
+    if self.to_save_configs:
+      self.save_configs()
 
-  def dump_config(self):
-    config_dir = self["dump_cfg_path"]
-    os.makedirs(config_dir, exist_ok=True)
-    config_path = os.path.join(config_dir, "configs.yaml")
-    with open(config_path, 'w') as yaml_file:
-      yaml.dump(self, yaml_file)
-
-
-if __name__ == "__main__":
-  sys.exit("Intended for import.")
+  def update_rec(self, cfg_args, keys=[]):
+    for key, val in cfg_args.items():
+      keys.append(key)
+      if isinstance(val, collections.abc.Mapping):
+        self.update_rec(val, keys[:])
+      else:
+        self[keys] = cfg_args[key]
+      keys.pop()
