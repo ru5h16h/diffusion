@@ -6,7 +6,6 @@ import torch
 from torch import nn
 from torch.utils import data
 import torchvision
-import tqdm
 
 import configs
 import utils
@@ -14,7 +13,7 @@ import utils
 _CFG = {
     "experiment": utils.get_current_ts(),
     "data": {
-        "set": "mnist/",
+        "set": "mnist",
         "n_classes": 10,
     },
     "train": {
@@ -22,6 +21,10 @@ _CFG = {
         "epochs": 100,
         "lr": 1e-3,
         "save_at": [5, 25, 50, 75, 100],
+        "unet": {
+            "sample_size": 28,
+            "out_channels": 1,
+        }
     },
     "diffusion": {
         "max_time_steps": 1000,
@@ -29,16 +32,24 @@ _CFG = {
         "infer_at": [5, 25, 50, 75, 100],
     },
     "path": {
-        "model": "runs/{experiment}/checkpoints/model_{epoch}",
-        "gen_file": "runs/{experiment}/generated_images/plot/{epoch}.png",
-        "configs": "runs/{experiment}/configs.json",
+        "model": "runs_cc/{experiment}/checkpoints/model_{epoch}",
+        "gen_file": "runs_cc/{experiment}/generated_images/plot/{epoch}.png",
+        "configs": "runs_cc/{experiment}/configs.json",
     }
 }
 
 
 def get_data(cfg):
-  dataset = torchvision.datasets.MNIST(
-      root=cfg["data", "set"],
+  data_name = cfg["data", "set"]
+  match (data_name):
+    case "mnist":
+      tv_cl = torchvision.datasets.MNIST
+    case "cifar10":
+      tv_cl = torchvision.datasets.CIFAR10
+    case _:
+      raise ValueError("Invalid dataset")
+  dataset = tv_cl(
+      root=data_name,
       train=True,
       download=True,
       transform=torchvision.transforms.ToTensor(),
@@ -53,17 +64,18 @@ def get_data(cfg):
 
 class ClassConditionedUnet(nn.Module):
 
-  def __init__(self, num_classes, class_emb_size=4):
+  def __init__(self, cfg, class_emb_size=4):
     super().__init__()
 
     # The embedding layer will map the class label to a vector of size class_emb_size
-    self.class_emb = nn.Embedding(num_classes, class_emb_size)
+    self.class_emb = nn.Embedding(cfg["data", "n_classes"], class_emb_size)
 
     # Self.model is an unconditional UNet with extra input channels to accept the conditioning information (the class embedding)
+    out_channels = cfg["train", "unet", "out_channels"]
     self.model = diffusers.UNet2DModel(
-        sample_size=28,
-        in_channels=1 + class_emb_size,
-        out_channels=1,
+        sample_size=cfg["train", "unet", "sample_size"],
+        in_channels=out_channels + class_emb_size,
+        out_channels=cfg["train", "unet", "out_channels"],
         layers_per_block=2,
         block_out_channels=(32, 64, 64),
         down_block_types=("DownBlock2D", "AttnDownBlock2D", "AttnDownBlock2D"),
@@ -105,34 +117,43 @@ def get_device():
 
 def infer(noise_scheduler, net, cfg, epoch):
   device = get_device()
-  x = torch.randn(80, 1, 28, 28).to(device)
+
+  out_channels = cfg["train", "unet", "out_channels"]
+  sample_size = cfg["train", "unet", "sample_size"]
+  x = torch.randn(80, out_channels, sample_size, sample_size).to(device)
   y = torch.tensor([[i] * 8 for i in range(10)]).flatten().to(device)
 
-  p_bar = utils.get_p_bar(len(noise_scheduler.timesteps))
-  for idx, t in enumerate(noise_scheduler.timesteps):
+  time_steps = noise_scheduler.timesteps
+  p_bar = utils.get_p_bar(len(time_steps))
+  for t in time_steps:
     with torch.no_grad():
       residual = net(x, t, y)
     x = noise_scheduler.step(residual, t, x).prev_sample
-    p_bar.update(idx)
+    p_bar.update(1)
 
   p_bar.close()
   _, ax = plt.subplots(1, 1, figsize=(12, 12))
-  ax.imshow(
-      torchvision.utils.make_grid(x.detach().cpu().clip(-1, 1), nrow=8)[0])
-  # Save the plot as a PNG file
+
+  grid = torchvision.utils.make_grid(x.detach().cpu().clip(-1, 1), nrow=8)
+  grid = grid.permute(1, 2, 0)
+  ax.imshow((grid + 1) / 2)
+
   gen_file = utils.get_path(cfg, "gen_file", epoch=epoch + 1)
   plt.savefig(gen_file)
 
 
 def main():
   args = utils.parse_args()
+  if args.debug:
+    _CFG["experiment"] = f"{_CFG['experiment']}_debug"
+
   cfg = configs.Configs(_CFG, args.configs, args)
   logging.info(f"Experiment: {cfg['experiment']}")
 
   device = get_device()
 
   train_dataloader = get_data(cfg)
-  net = ClassConditionedUnet(num_classes=cfg["data", "n_classes"]).to(device)
+  net = ClassConditionedUnet(cfg).to(device)
   loss_fn = nn.MSELoss()
   opt = torch.optim.Adam(net.parameters(), lr=cfg["train", "lr"])
   noise_scheduler = get_noise_scheduler(cfg)
