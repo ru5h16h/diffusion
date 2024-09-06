@@ -55,10 +55,10 @@ _CFG = {
         'n_images_approx': 8
     },
     "path": {
-        "weights": "runs/{experiment}/weights/model_{epoch}.keras",
+        "model": "runs/{experiment}/checkpoints",
         "writer": "runs/{experiment}/writer",
         "gen_dir": "runs/{experiment}/generated_data/{experiment}",
-        "pre_trained_weights": "",
+        "checkpoints_dir": "",
         "configs": "runs/{experiment}/configs.json",
     }
 }
@@ -93,9 +93,9 @@ def get_weight_t(diff_model: diffusion.Diffusion, step_t: tf.Tensor, cfg):
 def get_start_epoch(cfg):
   if not cfg["train_cfg", "continue_training"]:
     return 0
-  pre_trained_path = utils.get_path(cfg, "pre_trained_weights")
+  pre_trained_path = utils.get_path(cfg, "checkpoints_dir")
   if pre_trained_path:
-    return int(pre_trained_path.split("model_")[-1]) - 1
+    return int(pre_trained_path.split("-")[-1]) - 1
   else:
     return 0
 
@@ -105,6 +105,7 @@ def train(
     data_len: int,
     diff_model: diffusion.Diffusion,
     unet_model: model.UNetWithAttention,
+    ckpt_manager: tf.train.CheckpointManager,
     cfg,
 ) -> None:
   """Trains the diffusion model.
@@ -155,9 +156,8 @@ def train(
     logging.info(f"Average loss for epoch {epoch + 1}/{epochs}: {loss: 0.6f}")
 
     # Save the model with minimum training loss.
-    model_path = utils.get_path(cfg, "weights", epoch=epoch + 1)
     if epoch + 1 in cfg["train_cfg", "save_at"]:
-      unet_model.save(model_path)
+      ckpt_manager.save(checkpoint_number=epoch + 1)
     unet_model.reset_metric_states()
 
 
@@ -176,15 +176,23 @@ def main():
   # Load UNet model.
   unet_model = model.UNetWithAttention(**cfg["train_cfg", "model"])
 
+  # Create checkpoint manager
+  ckpt = tf.train.Checkpoint(unet_model=unet_model)
+  ckpt_manager = tf.train.CheckpointManager(
+      ckpt,
+      utils.get_path(cfg, "model"),
+      len(cfg["train_cfg", "save_at"]),
+  )
+
   # Load weights, if given
-  pre_trained_path = utils.get_path(cfg, "pre_trained_weights")
+  pre_trained_path = utils.get_path(cfg, "checkpoints_dir")
   if pre_trained_path:
-    unet_model.load_weights(pre_trained_path)
+    ckpt.restore(pre_trained_path).expect_partial()
     logging.info(f"Continuing from path {pre_trained_path}.")
 
   # Load dataset.
   tf_dataset, data_len = data_prep.get_datasets(cfg)
-  train(tf_dataset, data_len, diff_model, unet_model, cfg)
+  train(tf_dataset, data_len, diff_model, unet_model, ckpt_manager, cfg)
 
 
 if __name__ == "__main__":
