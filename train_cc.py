@@ -72,9 +72,8 @@ def get_noise_scheduler():
 
 
 def get_device():
-  device = "mps"
   if torch.backends.mps.is_available():
-    device = "cpu"
+    device = "mps"
   elif torch.cuda.is_available():
     device = "cuda"
   else:
