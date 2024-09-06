@@ -9,6 +9,7 @@ import sys
 import time
 
 import tensorflow as tf
+import tqdm
 
 
 def profile(func):
@@ -94,6 +95,10 @@ def parse_args():
       help="path to the configs",
   )
   return parser.parse_args()
+
+
+def get_p_bar(length):
+  return tqdm.tqdm(total=length, position=0, leave=True)
 
 
 if __name__ == "__main__":
