@@ -81,5 +81,20 @@ def write_json(file_path: str, data_dict):
     json.dump(data_dict, fp)
 
 
+def parse_args():
+  parser = argparse.ArgumentParser()
+  parser.add_argument(
+      "--debug",
+      action="store_true",
+      help="toggles debug mode",
+  )
+  parser.add_argument(
+      "--configs",
+      type=str,
+      help="path to the configs",
+  )
+  return parser.parse_args()
+
+
 if __name__ == "__main__":
   sys.exit("Intended for import.")

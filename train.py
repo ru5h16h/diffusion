@@ -64,21 +64,6 @@ _CFG = {
 }
 
 
-def parse_args():
-  parser = argparse.ArgumentParser()
-  parser.add_argument(
-      "--debug",
-      action="store_true",
-      help="toggles debug mode",
-  )
-  parser.add_argument(
-      "--configs",
-      type=str,
-      help="path to the configs",
-  )
-  return parser.parse_args()
-
-
 def get_weight_t(diff_model: diffusion.Diffusion, step_t: tf.Tensor, cfg):
   """Returns the weight as per given configurations."""
   weight_strategy = cfg["train_cfg", "weight_strategy"]
@@ -163,7 +148,7 @@ def train(
 
 def main():
   """The entry point of the training."""
-  args = parse_args()
+  args = utils.parse_args()
   if args.debug:
     _CFG["experiment"] = f"{_CFG['experiment']}_debug"
 

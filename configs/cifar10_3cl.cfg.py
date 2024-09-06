@@ -13,7 +13,6 @@ cfg = {
         'sample_every': 10000,
     },
     "path": {
-        "pre_trained_weights":
-            "runs/20240905T135448M862/weights/model_50.keras",
+        "checkpoints_dir": "runs/20240905T234338M475/checkpoints/ckpt-500",
     }
 }

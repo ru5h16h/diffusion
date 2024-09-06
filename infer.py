@@ -22,6 +22,45 @@ import utils
 
 SEP_WIDTH = 2
 
+_CFG = {
+    "experiment": utils.get_current_ts(),
+    "seed": 42,
+    "default_dtype": "float32",
+    "path": {
+        "gen_dir":
+            "runs/20240905T234338M475/generated_data/{experiment}",
+        "checkpoints_dir":
+            "runs/20240905T234338M475/checkpoints/ckpt-500",
+        "configs":
+            "runs/20240905T234338M475/generated_data/{experiment}/configs.json",
+    },
+    "diffusion_cfg": {
+        'max_time_steps': 1000,
+        'sampling_process': 'ddim',
+        'inference_steps': 32,
+        'pred_type': 'v',
+        'variance_schedule': 'cosine',
+    },
+    "data_cfg": {
+        "img_size": 32,
+    },
+    "train_cfg": {
+        'model': {
+            'n_channels': 32,
+            'channel_mults': [1, 2, 4, 8],
+            'is_attn': [False, False, True, True],
+            'out_channels': 3,
+            'n_blocks': 2
+        },
+        'batch_size': 32
+    },
+    'only_last': True,
+    'store_individually': False,
+    'store_gif': False,
+    'store_collage': True,
+    'n_images_approx': 8,
+}
+
 
 def divide_batch_size(batch_size: int) -> Tuple[int, int]:
   sqrt_batch_size = int(math.sqrt(batch_size))
@@ -130,7 +169,7 @@ def store_jpeg(sequence: List[np.ndarray], step: str, only_last: bool,
 def infer(
     unet_model: model.UNetWithAttention,
     diff_model: diffusion.Diffusion,
-    cfg,
+    cfg: configs.Configs,
     inference_steps: int = None,
     out_file_id: str = "predict",
 ):
@@ -199,19 +238,19 @@ def infer(
   time_taken = time.time() - st_time
   logging.info(f"Time taken for generation: {time_taken:0.3f}")
 
-  if cfg["infer_cfg", "store_individually"]:
+  if cfg["store_individually"]:
     ind_dir = get_ind_dir(cfg)
     batch = to_gif[-1].astype(np.uint8)
     for idx, image in enumerate(batch):
       image_path = os.path.join(ind_dir, f"{out_file_id}_{idx}.png")
       imageio.imwrite(image_path, image)
-  if cfg["infer_cfg", "store_gif"]:
+  if cfg["store_gif"]:
     store_gif(sequence=to_gif, step=out_file_id, cfg=cfg)
-  if cfg["infer_cfg", "store_collage"]:
+  if cfg["store_collage"]:
     store_jpeg(
         sequence=to_gif,
         step=out_file_id,
-        only_last=cfg["infer_cfg", "only_last"],
+        only_last=cfg["only_last"],
         cfg=cfg,
     )
   return time_taken
@@ -219,37 +258,34 @@ def infer(
 
 def main():
   args = utils.parse_args()
-  configs.cfg = configs.Configs(path=args.configs)
+  cfg = configs.Configs(_CFG, args.configs, args)
+  logging.info(f"Experiment: {cfg['experiment']}")
   logging.info(f"Using configs: {args.configs}.")
 
   # Load diffusion model.
-  seed = configs.cfg["seed"]
-  diff_model = diffusion.Diffusion(seed=seed, **configs.cfg["diffusion_cfg"])
+  diff_model = diffusion.Diffusion(cfg=cfg)
 
   # Load UNet model.
-  unet_model = model.UNetWithAttention(**configs.cfg["train_cfg", "model"])
+  unet_model = model.UNetWithAttention(**cfg["train_cfg", "model"])
 
-  # Load checkpoint
+  # Restore checkpoints.
   ckpt = tf.train.Checkpoint(unet_model=unet_model)
-  ckpt_configs = configs.cfg["train_cfg", "checkpoint"]
-  ckpt_manager = tf.train.CheckpointManager(checkpoint=ckpt, **ckpt_configs)
-  if ckpt_manager.latest_checkpoint:
-    # TODO: Resolve the "Value in checkpoint could not be found in the
-    #  restored object" warning.
-    ckpt.restore(ckpt_manager.latest_checkpoint).expect_partial()
-    logging.info("Restored from {}".format(ckpt_manager.latest_checkpoint))
+  pre_trained_path = utils.get_path(cfg, "checkpoints_dir")
+  if pre_trained_path:
+    ckpt.restore(pre_trained_path).expect_partial()
+    logging.info(f"Continuing from path {pre_trained_path}.")
   else:
-    raise ValueError("Checkpoint not present.")
+    raise ValueError("Checkpoint path needed.")
 
-  gen_dir = configs.cfg["infer_cfg", "gen_dir"]
+  gen_dir = utils.get_path(cfg, "gen_dir")
   logging.info(f"Storing generations at {gen_dir}.")
 
-  batch_size = configs.cfg["train_cfg", "batch_size"]
-  n_images_approx = configs.cfg["infer_cfg", "n_images_approx"]
+  batch_size = cfg["train_cfg", "batch_size"]
+  n_images_approx = cfg["n_images_approx"]
   count = math.ceil(n_images_approx / batch_size) or 1
   times = []
   for idx in tqdm.tqdm(range(count)):
-    times.append(infer(unet_model, diff_model, out_file_id=f"pred_{idx}"))
+    times.append(infer(unet_model, diff_model, cfg, out_file_id=f"pred_{idx}"))
   if len(times) > 1:
     times = times[1:]
     avg_time = np.average(times)
