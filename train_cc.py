@@ -18,9 +18,9 @@ _CFG = {
     },
     "train": {
         "batch_size": 128,
-        "epochs": 100,
+        "epochs": 1,
         "lr": 1e-3,
-        "save_at": [5, 25, 50, 75, 100],
+        "save_at": [1],
         "unet": {
             "sample_size": 28,
             "out_channels": 1,
@@ -29,7 +29,7 @@ _CFG = {
     "diffusion": {
         "max_time_steps": 1000,
         "beta_schedule": "squaredcos_cap_v2",
-        "infer_at": [5, 25, 50, 75, 100],
+        "infer_at": [1],
     },
     "path": {
         "model": "runs_cc/{experiment}/checkpoints/model_{epoch}",
@@ -125,17 +125,21 @@ def infer(noise_scheduler, net, cfg, epoch):
 
   time_steps = noise_scheduler.timesteps
   p_bar = utils.get_p_bar(len(time_steps))
-  for t in time_steps:
+  for idx, t in enumerate(time_steps):
     with torch.no_grad():
       residual = net(x, t, y)
     x = noise_scheduler.step(residual, t, x).prev_sample
     p_bar.update(1)
+
+    if cfg["args", "debug"] and idx == 20:
+      break
 
   p_bar.close()
   _, ax = plt.subplots(1, 1, figsize=(12, 12))
 
   grid = torchvision.utils.make_grid(x.detach().cpu().clip(-1, 1), nrow=8)
   grid = grid.permute(1, 2, 0)
+  grid = grid[..., [2, 1, 0]]
   ax.imshow((grid + 1) / 2)
 
   gen_file = utils.get_path(cfg, "gen_file", epoch=epoch + 1)
@@ -192,10 +196,10 @@ def main():
     avg_loss = sum(losses) / len(losses)
     logging.info(f"Finished epoch {epoch}. Average loss: {avg_loss:05f}")
 
-    if epoch in save_at or debug:
+    if epoch + 1 in save_at or debug:
       model_path = utils.get_path(cfg, "model", epoch=epoch)
       torch.save(net.state_dict(), model_path)
-    if epoch in infer_at or debug:
+    if epoch + 1 in infer_at or debug:
       infer(noise_scheduler, net, cfg, epoch)
 
     if debug and epoch == 0:
