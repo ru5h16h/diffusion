@@ -184,7 +184,7 @@ def main():
       opt.step()
 
       losses.append(loss.item())
-      p_bar.update(idx)
+      p_bar.update(1)
 
       if debug and idx > 10:
         break
