@@ -90,15 +90,18 @@ def infer(noise_scheduler, net):
 
     # Get model pred
     with torch.no_grad():
-      residual = net(x, t, y)  # Again, note that we pass in our labels y
+      residual = net(x, t, y)
 
     # Update sample with step
     x = noise_scheduler.step(residual, t, x).prev_sample
 
   fig, ax = plt.subplots(1, 1, figsize=(12, 12))
-  ax.imshow(torchvision.utils.make_grid(x.detach().cpu().clip(-1, 1),
-                                        nrow=8)[0],
-            cmap="Greys")
+  ax.imshow(
+      torchvision.utils.make_grid(x.detach().cpu().clip(-1, 1), nrow=8)[0],
+      cmap="Greys",
+  )
+  # Save the plot as a PNG file
+  plt.savefig('output_image.png')
 
 
 def main():
