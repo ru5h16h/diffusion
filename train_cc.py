@@ -6,6 +6,7 @@ from torch.utils import data
 import torchvision
 
 import configs
+import infer_cc
 import utils
 import utils_cc
 
@@ -130,7 +131,7 @@ def main():
       model_path = utils.get_path(cfg, "model", epoch=epoch + 1)
       torch.save(net.state_dict(), model_path)
     if epoch + 1 in infer_at or debug:
-      utils_cc.infer(noise_scheduler, net, cfg, epoch)
+      infer_cc.infer(noise_scheduler, net, cfg, epoch)
 
     if debug and epoch == 0:
       break

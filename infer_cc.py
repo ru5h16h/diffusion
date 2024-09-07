@@ -1,14 +1,16 @@
+import collections
 import logging
 
-import diffusers
 import matplotlib.pyplot as plt
+import numpy as np
+from PIL import Image
 import torch
-from torch import nn
 from torch.utils import data
 import torchvision
 
 import configs
 import utils
+import utils_cc
 
 _CFG = {
     "experiment": utils.get_current_ts(),
@@ -16,9 +18,15 @@ _CFG = {
         "n_classes": 10,
     },
     "train": {
+        "batch_size": 128,
         "unet": {
-            "sample_size": 32,
-            "out_channels": 3,
+            "sample_size": 28,
+            "out_channels": 1,
+            "layers_per_block": 2,
+            "block_out_channels": (32, 64, 64),
+            "down_block_types":
+                ("DownBlock2D", "AttnDownBlock2D", "AttnDownBlock2D"),
+            "up_block_types": ("AttnUpBlock2D", "AttnUpBlock2D", "UpBlock2D"),
         }
     },
     "diffusion": {
@@ -27,95 +35,95 @@ _CFG = {
     },
     "path": {
         "model":
-            "runs_cc/20240906T212532M370/checkpoints/model_74",
+            "runs_cc/20240906T234605M545/checkpoints/model_99",
         "gen_file":
-            "runs_cc/20240906T212532M370/generated_images/{experiment}/plots/{epoch}.png"
+            "runs_cc/20240906T234605M545/generated_images/{experiment}/plots/{epoch}.png",
+        "ind_path":
+            "runs_cc/20240906T234605M545/generated_images/{experiment}/ind/images/{img_id}.png",
+        "img_lab_path":
+            "runs_cc/20240906T234605M545/generated_images/{experiment}/ind/img_lab.json"
+    },
+    "infer_cfg": {
+        "n_images_per_class": 1000,
+        "format": ["collage", "ind"]
     }
 }
 
 
-class ClassConditionedUnet(nn.Module):
-
-  def __init__(self, cfg, class_emb_size=4):
-    super().__init__()
-
-    # The embedding layer will map the class label to a vector of size class_emb_size
-    self.class_emb = nn.Embedding(cfg["data", "n_classes"], class_emb_size)
-
-    # Self.model is an unconditional UNet with extra input channels to accept the conditioning information (the class embedding)
-    out_channels = cfg["train", "unet", "out_channels"]
-    self.model = diffusers.UNet2DModel(
-        sample_size=cfg["train", "unet", "sample_size"],
-        in_channels=out_channels + class_emb_size,
-        out_channels=cfg["train", "unet", "out_channels"],
-        layers_per_block=2,
-        block_out_channels=(32, 64, 64),
-        down_block_types=("DownBlock2D", "AttnDownBlock2D", "AttnDownBlock2D"),
-        up_block_types=("AttnUpBlock2D", "AttnUpBlock2D", "UpBlock2D"),
-    )
-
-  def forward(self, x, t, class_labels):
-    bs, ch, w, h = x.shape
-
-    # class conditioning in right shape to add as additional input channels
-    class_cond = self.class_emb(class_labels)
-    class_cond = class_cond.view(bs, class_cond.shape[1], 1,
-                                 1).expand(bs, class_cond.shape[1], w, h)
-    # x is shape (bs, 1, 28, 28) and class_cond is now (bs, 4, 28, 28)
-
-    # Net input is now x and class cond concatenated together along dimension 1
-    net_input = torch.cat((x, class_cond), 1)  # (bs, 5, 28, 28)
-
-    # Feed this to the UNet alongside the timestep and return the prediction
-    return self.model(net_input, t).sample  # (bs, 1, 28, 28)
-
-
-def get_noise_scheduler(cfg):
-  return diffusers.DDPMScheduler(
-      num_train_timesteps=cfg["diffusion", "max_time_steps"],
-      beta_schedule=cfg["diffusion", "beta_schedule"],
-  )
-
-
-def get_device():
-  if torch.backends.mps.is_available():
-    device = "mps"
-  elif torch.cuda.is_available():
-    device = "cuda"
-  else:
-    device = "cpu"
-  return device
-
-
-def infer(noise_scheduler, net, cfg, f_name):
-  device = get_device()
+def infer(noise_scheduler, net, cfg, epoch, store_format=["collage"]):
+  device = utils_cc.get_device()
 
   out_channels = cfg["train", "unet", "out_channels"]
   sample_size = cfg["train", "unet", "sample_size"]
-  x = torch.randn(80, out_channels, sample_size, sample_size).to(device)
-  y = torch.tensor([[i] * 8 for i in range(10)]).flatten().to(device)
 
-  time_steps = noise_scheduler.timesteps
-  p_bar = utils.get_p_bar(len(time_steps))
-  for idx, t in enumerate(time_steps):
-    with torch.no_grad():
-      residual = net(x, t, y)
-    x = noise_scheduler.step(residual, t, x).prev_sample
+  if "ind" in store_format:
+    n_images_per_class = cfg["infer_cfg", "n_images_per_class"]
+    n_classes = cfg["data", "n_classes"]
+    x = torch.randn(n_classes * n_images_per_class, out_channels, sample_size,
+                    sample_size).to(device)
+    y = torch.tensor([[i] * n_images_per_class for i in range(n_classes)
+                     ]).flatten().to(device)
+
+    dataset = data.TensorDataset(x, y)
+    batch_size = cfg["train", "batch_size"]
+    dataloader = data.DataLoader(dataset, batch_size=batch_size)
+
+    p_bar = utils.get_p_bar(len(dataloader))
+    name_img_list = []
+    for b_id, (batch_x, batch_y) in enumerate(dataloader):
+      for idx, t in enumerate(noise_scheduler.timesteps):
+        with torch.no_grad():
+          residual = net(batch_x, t, batch_y)
+        batch_x = noise_scheduler.step(residual, t, batch_x).prev_sample
+        if cfg["args", "debug"] and idx == 20:
+          break
+
+      batch_y = batch_y.detach().cpu().numpy()
+      batch_x = (batch_x + 1) / 2
+      batch_x = batch_x.detach().cpu().numpy()
+
+      for idx, (img, lab) in enumerate(zip(batch_x, batch_y)):
+        img_id = b_id * batch_size + idx
+        out_file = utils.get_path(cfg, "ind_path", class_id=lab, img_id=img_id)
+        if img.shape[0] == 1:
+          img = img.squeeze()
+        img = (img * 255).astype(np.uint8)
+        img = Image.fromarray(img)
+        img.save(out_file)
+        name_img_list.append({"filepath": out_file, "class": int(lab)})
+
+      if cfg["args", "debug"]:
+        break
+    img_lab_path = utils.get_path(cfg, "img_lab_path")
+    utils.write_json(file_path=img_lab_path, data_dict=name_img_list)
+
+  if "collage" in store_format:
+    x = torch.randn(80, out_channels, sample_size, sample_size).to(device)
+    y = torch.tensor([[i] * 8 for i in range(10)]).flatten().to(device)
+
+    time_steps = noise_scheduler.timesteps
+    p_bar = utils.get_p_bar(len(time_steps))
+    for idx, t in enumerate(time_steps):
+      with torch.no_grad():
+        residual = net(x, t, y)
+      x = noise_scheduler.step(residual, t, x).prev_sample
+      if cfg["args", "debug"] and idx == 20:
+        break
+
+    _, ax = plt.subplots(1, 1, figsize=(12, 12))
+    x = (x + 1) / 2
+    grid = torchvision.utils.make_grid(x.detach().cpu().clip(0, 1), nrow=8)
+    grid = grid.permute(1, 2, 0)
+    ax.imshow(grid)
+
+    try:
+      gen_file = utils.get_path(cfg, "gen_file", epoch=epoch + 1)
+    except:
+      gen_file = utils.get_path(cfg, "gen_file", epoch=epoch)
+    plt.savefig(gen_file)
+
     p_bar.update(1)
-
-    if cfg["args", "debug"] and idx == 20:
-      break
-
   p_bar.close()
-  _, ax = plt.subplots(1, 1, figsize=(12, 12))
-
-  grid = torchvision.utils.make_grid(x.detach().cpu().clip(-1, 1), nrow=8)
-  grid = grid.permute(1, 2, 0)
-  grid = grid[..., [2, 1, 0]]
-  ax.imshow((grid + 1) / 2)
-
-  gen_file = utils.get_path(cfg, "gen_file", epoch=f_name)
-  plt.savefig(gen_file)
 
 
 def main():
@@ -126,15 +134,21 @@ def main():
   cfg = configs.Configs(_CFG, args.configs, args, False)
   logging.info(f"Experiment: {cfg['experiment']}")
 
-  device = get_device()
+  device = utils_cc.get_device()
 
-  net = ClassConditionedUnet(cfg).to(device)
-  noise_scheduler = get_noise_scheduler(cfg)
+  net = utils_cc.ClassConditionedUnet(cfg).to(device)
+  noise_scheduler = utils_cc.get_noise_scheduler(cfg)
 
   model_path = utils.get_path(cfg, "model")
-  net.load_state_dict(torch.load(model_path), weights_only=True)
+  net.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
 
-  infer(noise_scheduler, net, cfg, "pred")
+  infer(
+      noise_scheduler,
+      net,
+      cfg,
+      "pred",
+      store_format=cfg["infer_cfg", "format"],
+  )
 
 
 if __name__ == "__main__":

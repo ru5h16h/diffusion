@@ -53,32 +53,3 @@ def get_device():
   else:
     device = "cpu"
   return device
-
-
-def infer(noise_scheduler, net, cfg, epoch):
-  device = get_device()
-
-  out_channels = cfg["train", "unet", "out_channels"]
-  sample_size = cfg["train", "unet", "sample_size"]
-  x = torch.randn(80, out_channels, sample_size, sample_size).to(device)
-  y = torch.tensor([[i] * 8 for i in range(10)]).flatten().to(device)
-
-  time_steps = noise_scheduler.timesteps
-  p_bar = utils.get_p_bar(len(time_steps))
-  for idx, t in enumerate(time_steps):
-    with torch.no_grad():
-      residual = net(x, t, y)
-    x = noise_scheduler.step(residual, t, x).prev_sample
-    p_bar.update(1)
-
-    if cfg["args", "debug"] and idx == 20:
-      break
-  p_bar.close()
-
-  _, ax = plt.subplots(1, 1, figsize=(12, 12))
-  x = (x + 1) / 2
-  grid = torchvision.utils.make_grid(x.detach().cpu().clip(0, 1), nrow=8)
-  grid = grid.permute(1, 2, 0)
-  ax.imshow(grid)
-  gen_file = utils.get_path(cfg, "gen_file", epoch=epoch + 1)
-  plt.savefig(gen_file)
