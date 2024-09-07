@@ -18,9 +18,9 @@ _CFG = {
     },
     "train": {
         "batch_size": 128,
-        "epochs": 1,
+        "epochs": 100,
         "lr": 1e-3,
-        "save_at": [1],
+        "save_at": [5, 10, 25, 50, 75, 100],
         "unet": {
             "sample_size": 28,
             "out_channels": 1,
