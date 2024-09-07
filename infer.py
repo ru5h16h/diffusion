@@ -54,11 +54,13 @@ _CFG = {
         },
         'batch_size': 32
     },
-    'only_last': True,
-    'store_individually': False,
-    'store_gif': False,
-    'store_collage': True,
-    'n_images_approx': 8,
+    "infer_cfg": {
+        'only_last': True,
+        'store_individually': False,
+        'store_gif': False,
+        'store_collage': True,
+        'n_images_approx': 8,
+    }
 }
 
 
@@ -238,19 +240,19 @@ def infer(
   time_taken = time.time() - st_time
   logging.info(f"Time taken for generation: {time_taken:0.3f}")
 
-  if cfg["store_individually"]:
+  if cfg["infer_cfg", "store_individually"]:
     ind_dir = get_ind_dir(cfg)
     batch = to_gif[-1].astype(np.uint8)
     for idx, image in enumerate(batch):
       image_path = os.path.join(ind_dir, f"{out_file_id}_{idx}.png")
       imageio.imwrite(image_path, image)
-  if cfg["store_gif"]:
+  if cfg["infer_cfg", "store_gif"]:
     store_gif(sequence=to_gif, step=out_file_id, cfg=cfg)
-  if cfg["store_collage"]:
+  if cfg["infer_cfg", "store_collage"]:
     store_jpeg(
         sequence=to_gif,
         step=out_file_id,
-        only_last=cfg["only_last"],
+        only_last=cfg["infer_cfg", "only_last"],
         cfg=cfg,
     )
   return time_taken
@@ -281,7 +283,7 @@ def main():
   logging.info(f"Storing generations at {gen_dir}.")
 
   batch_size = cfg["train_cfg", "batch_size"]
-  n_images_approx = cfg["n_images_approx"]
+  n_images_approx = cfg["infer_cfg", "n_images_approx"]
   count = math.ceil(n_images_approx / batch_size) or 1
   times = []
   for idx in tqdm.tqdm(range(count)):
