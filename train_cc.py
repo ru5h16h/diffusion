@@ -15,6 +15,7 @@ _CFG = {
     "data": {
         "set": "mnist",
         "n_classes": 10,
+        "retrain_classes": None
     },
     "train": {
         "batch_size": 128,
@@ -29,12 +30,13 @@ _CFG = {
     "diffusion": {
         "max_time_steps": 1000,
         "beta_schedule": "squaredcos_cap_v2",
-        "infer_at": [1],
+        "infer_at": [5, 10, 25, 50, 75, 100],
     },
     "path": {
         "model": "runs_cc/{experiment}/checkpoints/model_{epoch}",
         "gen_file": "runs_cc/{experiment}/generated_images/plot/{epoch}.png",
         "configs": "runs_cc/{experiment}/configs.json",
+        "checkpoint": ""
     }
 }
 
@@ -54,6 +56,10 @@ def get_data(cfg):
       download=True,
       transform=torchvision.transforms.ToTensor(),
   )
+  retrain_cls = cfg["data", "retrain_classes"]
+  if retrain_cls:
+    indices = [idx for idx, (_, lb) in enumerate(dataset) if lb in retrain_cls]
+    dataset = torch.utils.data.Subset(dataset, indices)
   train_dataloader = data.DataLoader(
       dataset,
       batch_size=cfg["train", "batch_size"],
@@ -156,8 +162,12 @@ def main():
 
   device = get_device()
 
-  train_dataloader = get_data(cfg)
   net = ClassConditionedUnet(cfg).to(device)
+  checkpoint_path = utils.get_path(cfg, "checkpoint")
+  if checkpoint_path:
+    net.load_state_dict(torch.load(checkpoint_path))
+
+  train_dataloader = get_data(cfg)
   loss_fn = nn.MSELoss()
   opt = torch.optim.Adam(net.parameters(), lr=cfg["train", "lr"])
   noise_scheduler = get_noise_scheduler(cfg)
