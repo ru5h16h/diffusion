@@ -15,7 +15,9 @@ _CFG = {
     "data": {
         "set": "mnist",
         "n_classes": 10,
-        "retrain_classes": None
+        "retrain_classes": None,
+        "mean": (0.1307,),
+        "std": (0.3081,),
     },
     "train": {
         "batch_size": 128,
@@ -25,6 +27,11 @@ _CFG = {
         "unet": {
             "sample_size": 28,
             "out_channels": 1,
+            "layers_per_block": 2,
+            "block_out_channels": (32, 64, 64),
+            "down_block_types":
+                ("DownBlock2D", "AttnDownBlock2D", "AttnDownBlock2D"),
+            "up_block_types": ("AttnUpBlock2D", "AttnUpBlock2D", "UpBlock2D"),
         }
     },
     "diffusion": {
@@ -41,6 +48,12 @@ _CFG = {
 }
 
 
+def denormalize(tensor, cfg):
+  for t, m, s in zip(tensor, cfg["data", "mean"], cfg["data", "std"]):
+    t.mul_(s).add_(m)
+  return tensor
+
+
 def get_data(cfg):
   data_name = cfg["data", "set"]
   match (data_name):
@@ -50,12 +63,14 @@ def get_data(cfg):
       tv_cl = torchvision.datasets.CIFAR10
     case _:
       raise ValueError("Invalid dataset")
-  dataset = tv_cl(
-      root=data_name,
-      train=True,
-      download=True,
-      transform=torchvision.transforms.ToTensor(),
-  )
+  dataset = tv_cl(root=data_name,
+                  train=True,
+                  download=True,
+                  transform=torchvision.transforms.Compose([
+                      torchvision.transforms.ToTensor(),
+                      torchvision.transforms.Normalize(mean=cfg["data", "mean"],
+                                                       std=cfg["data", "std"])
+                  ]))
   retrain_cls = cfg["data", "retrain_classes"]
   if retrain_cls:
     indices = [idx for idx, (_, lb) in enumerate(dataset) if lb in retrain_cls]
@@ -79,13 +94,8 @@ class ClassConditionedUnet(nn.Module):
     # Self.model is an unconditional UNet with extra input channels to accept the conditioning information (the class embedding)
     out_channels = cfg["train", "unet", "out_channels"]
     self.model = diffusers.UNet2DModel(
-        sample_size=cfg["train", "unet", "sample_size"],
         in_channels=out_channels + class_emb_size,
-        out_channels=cfg["train", "unet", "out_channels"],
-        layers_per_block=2,
-        block_out_channels=(32, 64, 64),
-        down_block_types=("DownBlock2D", "AttnDownBlock2D", "AttnDownBlock2D"),
-        up_block_types=("AttnUpBlock2D", "AttnUpBlock2D", "UpBlock2D"),
+        **cfg["train", "unet"],
     )
 
   def forward(self, x, t, class_labels):
@@ -143,10 +153,10 @@ def infer(noise_scheduler, net, cfg, epoch):
   p_bar.close()
   _, ax = plt.subplots(1, 1, figsize=(12, 12))
 
-  grid = torchvision.utils.make_grid(x.detach().cpu().clip(-1, 1), nrow=8)
+  x = denormalize(x, cfg)
+  grid = torchvision.utils.make_grid(x.detach().cpu().clip(0, 255), nrow=8)
   grid = grid.permute(1, 2, 0)
-  grid = grid[..., [2, 1, 0]]
-  ax.imshow((grid + 1) / 2)
+  ax.imshow(grid)
 
   gen_file = utils.get_path(cfg, "gen_file", epoch=epoch + 1)
   plt.savefig(gen_file)
