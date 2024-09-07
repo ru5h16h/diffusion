@@ -3,7 +3,8 @@ cfg = {
         "set": "cifar10",
     },
     "train": {
-        "epochs": 250,
+        "epochs":
+            500,
         "unet": {
             "sample_size": 32,
             "out_channels": 3,
@@ -13,9 +14,13 @@ cfg = {
                 ("UpBlock2D", "AttnUpBlock2D", "UpBlock2D", "UpBlock2D"),
             "block_out_channels": (32, 64, 128, 128),
         },
-        "save_at": [5, 10, 25, 50, 75, 100, 150, 200, 250],
+        "save_at": [
+            5, 10, 25, 50, 75, 100, 150, 200, 250, 300, 350, 400, 450, 500
+        ],
     },
     "diffusion": {
-        "infer_at": [1, 5, 10, 25, 50, 75, 100, 150, 200, 250],
+        "infer_at": [
+            1, 5, 10, 25, 50, 75, 100, 150, 200, 250, 300, 350, 400, 450, 500
+        ],
     }
 }
