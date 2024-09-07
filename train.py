@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Module for training the diffusion model."""
 
-import argparse
 import logging
 
 import tensorflow as tf
@@ -33,7 +32,7 @@ _CFG = {
         'variance_schedule': 'cosine',
     },
     "train_cfg": {
-        'batch_size': 32,
+        'batch_size': 128,
         'epochs': 100,
         'model': {
             'n_channels': 32,
@@ -42,9 +41,9 @@ _CFG = {
             'out_channels': 1,
             'n_blocks': 2
         },
-        'sample_every': 1000,
+        "infer_at": [1, 5, 10, 25, 50, 75, 100],
         'weight_strategy': 'snr',
-        "save_at": [50, 100],
+        "save_at": [5, 10, 25, 50, 75, 100],
         "continue_training": False,
     },
     "infer_cfg": {
@@ -52,7 +51,7 @@ _CFG = {
         'store_individually': False,
         'store_gif': False,
         'store_collage': True,
-        'n_images_approx': 8
+        'n_images_approx': 8,
     },
     "path": {
         "model": "runs/{experiment}/checkpoints",
@@ -108,14 +107,13 @@ def train(
 
   start_epoch = get_start_epoch(cfg)
   epochs = cfg["train_cfg", "epochs"]
-  sample_every = cfg["train_cfg", "sample_every"]
   max_t = cfg["diffusion_cfg", "max_time_steps"]
 
   rng = tf.random.Generator.from_seed(cfg["seed"])
   for epoch in range(start_epoch, epochs):
 
     p_bar = tqdm.tqdm(total=data_len, position=0, leave=True)
-    for idx, batch in enumerate(iter(tf_dataset)):
+    for batch in iter(tf_dataset):
       # Generate random time steps for each image in the batch.
       step_t = rng.uniform(
           shape=(batch.shape[0],),
@@ -128,11 +126,6 @@ def train(
       # Perform train step.
       weight_t = get_weight_t(diff_model, step_t, cfg)
       unet_model.train_step(data, step_t, weight_t)
-
-      # Infer after certain steps.
-      step = epoch * data_len + idx
-      if step % sample_every == 0 and step > 0:
-        infer.infer(unet_model, diff_model, cfg, out_file_id=str(step))
       p_bar.update(1)
 
     loss = unet_model.loss_metric.result()
@@ -143,6 +136,9 @@ def train(
     # Save the model with minimum training loss.
     if epoch + 1 in cfg["train_cfg", "save_at"]:
       ckpt_manager.save(checkpoint_number=epoch + 1)
+    if epoch + 1 in cfg["train_cfg", "infer_at"]:
+      infer.infer(unet_model, diff_model, cfg, out_file_id=str(epoch + 1))
+
     unet_model.reset_metric_states()
 
 

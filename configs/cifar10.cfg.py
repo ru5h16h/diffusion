@@ -3,12 +3,11 @@ cfg = {
         "dataset": "cifar10",
     },
     "train_cfg": {
-        "batch_size": 128,
-        'epochs': 500,
+        'epochs': 250,
         "model": {
             'out_channels': 3,
         },
-        "save_at": [50, 100, 250, 500],
-        'sample_every': 25000,
+        "save_at": [5, 10, 25, 50, 75, 100, 150, 200, 250],
+        "infer_at": [1, 5, 10, 25, 50, 75, 100, 150, 200, 250],
     }
 }
