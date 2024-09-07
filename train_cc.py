@@ -15,8 +15,6 @@ _CFG = {
         "set": "mnist",
         "n_classes": 10,
         "retrain_classes": None,
-        "mean": (0.1307,),
-        "std": (0.3081,),
     },
     "train": {
         "batch_size": 128,
@@ -60,11 +58,7 @@ def get_data(cfg):
       root=data_name,
       train=True,
       download=True,
-      transform=torchvision.transforms.Compose([
-          torchvision.transforms.ToTensor(),
-          # torchvision.transforms.Normalize(mean=cfg["data", "mean"],
-          #                                  std=cfg["data", "std"]),
-      ]),
+      transform=torchvision.transforms.ToTensor(),
   )
   retrain_cls = cfg["data", "retrain_classes"]
   if retrain_cls:

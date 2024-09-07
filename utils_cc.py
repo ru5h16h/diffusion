@@ -7,12 +7,6 @@ import torchvision
 import utils
 
 
-def denormalize(tensor, cfg):
-  for t, m, s in zip(tensor, cfg["data", "mean"], cfg["data", "std"]):
-    t.mul_(s).add_(m)
-  return tensor
-
-
 class ClassConditionedUnet(nn.Module):
 
   def __init__(self, cfg, class_emb_size=4):
@@ -79,14 +73,12 @@ def infer(noise_scheduler, net, cfg, epoch):
 
     if cfg["args", "debug"] and idx == 20:
       break
-
   p_bar.close()
-  _, ax = plt.subplots(1, 1, figsize=(12, 12))
 
+  _, ax = plt.subplots(1, 1, figsize=(12, 12))
   x = (x + 1) / 2
   grid = torchvision.utils.make_grid(x.detach().cpu().clip(0, 1), nrow=8)
   grid = grid.permute(1, 2, 0)
   ax.imshow(grid)
-
   gen_file = utils.get_path(cfg, "gen_file", epoch=epoch + 1)
   plt.savefig(gen_file)
