@@ -94,6 +94,7 @@ def infer(noise_scheduler, net, cfg, epoch, store_format=["collage"]):
 
       if cfg["args", "debug"]:
         break
+      p_bar.update(1)
     img_lab_path = utils.get_path(cfg, "img_lab_path")
     utils.write_json(file_path=img_lab_path, data_dict=name_img_list)
 
@@ -109,6 +110,7 @@ def infer(noise_scheduler, net, cfg, epoch, store_format=["collage"]):
       x = noise_scheduler.step(residual, t, x).prev_sample
       if cfg["args", "debug"] and idx == 20:
         break
+      p_bar.update(1)
 
     _, ax = plt.subplots(1, 1, figsize=(12, 12))
     x = (x + 1) / 2
@@ -122,7 +124,6 @@ def infer(noise_scheduler, net, cfg, epoch, store_format=["collage"]):
       gen_file = utils.get_path(cfg, "gen_file", epoch=epoch)
     plt.savefig(gen_file)
 
-    p_bar.update(1)
   p_bar.close()
 
 
