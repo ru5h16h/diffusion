@@ -1,6 +1,7 @@
 cfg = {
     "data": {
         "set": "cifar10",
+        "retrain_classes": [0, 5, 9]
     },
     "train": {
         "epochs":
@@ -23,4 +24,7 @@ cfg = {
             1, 5, 10, 25, 50, 75, 100, 150, 200, 250, 300, 350, 400, 450, 500
         ],
     },
+    "path": {
+        "checkpoint": "runs_cc/20240907T173222M268/checkpoints/model_400"
+    }
 }
