@@ -244,6 +244,8 @@ def infer(unet_model: model.UNetWithAttention,
     batch = to_gif[-1].astype(np.uint8)
     for idx, image in enumerate(batch):
       image_path = os.path.join(ind_dir, f"{out_file_id}_{idx}.png")
+      if image.shape[-1] == 1:
+        image = np.concatenate([image] * 3, axis=-1)
       imageio.imwrite(image_path, image)
   if cfg["infer_cfg", "store_gif"]:
     store_gif(sequence=to_gif, step=out_file_id, cfg=cfg)
@@ -284,7 +286,7 @@ def main():
   batch_size = cfg["train_cfg", "batch_size"]
   n_images = cfg["infer_cfg", "n_images"]
   times = []
-  for idx in tqdm.tqdm(0, n_images, batch_size):
+  for idx in tqdm.tqdm(range(0, n_images, batch_size)):
     times.append(
         infer(
             unet_model=unet_model,
