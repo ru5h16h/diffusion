@@ -25,6 +25,6 @@ cfg = {
         ],
     },
     "path": {
-        "checkpoint": "runs_cc/20240907T173222M268/checkpoints/model_400"
+        "checkpoint": "runs_cc/20240907T173222M268/checkpoints/model_500"
     }
 }
