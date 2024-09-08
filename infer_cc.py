@@ -87,6 +87,8 @@ def infer(noise_scheduler, net, cfg, epoch, store_format=["collage"]):
         out_file = utils.get_path(cfg, "ind_path", class_id=lab, img_id=img_id)
         if img.shape[0] == 1:
           img = img.squeeze()
+        else:
+          img = np.transpose(img, (1, 2, 0))
         img = (img * 255).astype(np.uint8)
         img = Image.fromarray(img)
         img.save(out_file)
