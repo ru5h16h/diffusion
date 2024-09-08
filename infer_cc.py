@@ -141,7 +141,8 @@ def main():
   noise_scheduler = utils_cc.get_noise_scheduler(cfg)
 
   model_path = utils.get_path(cfg, "model")
-  net.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
+  net.load_state_dict(
+      torch.load(model_path, map_location=torch.device(utils_cc.get_device())))
 
   infer(
       noise_scheduler,
