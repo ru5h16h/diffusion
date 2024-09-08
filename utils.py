@@ -30,12 +30,13 @@ def get_default_dtype(cfg):
   return tf.as_dtype(cfg["default_dtype"])
 
 
-def get_input_shape(cfg):
+def get_input_shape(cfg, batch_size=None):
   """Returns the shape of image batch that will be using in training."""
-  batch = cfg["train_cfg", "batch_size"]
+  if not batch_size:
+    batch_size = cfg["train_cfg", "batch_size"]
   img_size = cfg["data_cfg", "img_size"]
   img_channels = cfg["train_cfg", "model", "out_channels"]
-  return (batch, img_size, img_size, img_channels)
+  return (batch_size, img_size, img_size, img_channels)
 
 
 def parse_args():

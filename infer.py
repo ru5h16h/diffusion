@@ -52,14 +52,14 @@ _CFG = {
             'out_channels': 3,
             'n_blocks': 2
         },
-        'batch_size': 32
+        'batch_size': 128
     },
     "infer_cfg": {
         'only_last': True,
         'store_individually': False,
         'store_gif': False,
         'store_collage': True,
-        'n_images_approx': 8,
+        'n_images': 8,
     }
 }
 
@@ -168,13 +168,12 @@ def store_jpeg(sequence: List[np.ndarray], step: str, only_last: bool,
   imageio.imwrite(png_path, canvas)
 
 
-def infer(
-    unet_model: model.UNetWithAttention,
-    diff_model: diffusion.Diffusion,
-    cfg: configs.Configs,
-    inference_steps: int = None,
-    out_file_id: str = "predict",
-):
+def infer(unet_model: model.UNetWithAttention,
+          diff_model: diffusion.Diffusion,
+          cfg: configs.Configs,
+          inference_steps: int = None,
+          out_file_id: str = "predict",
+          batch_size=None):
   """Inference of diffusion model.
   
   Args:
@@ -202,7 +201,7 @@ def infer(
   time_seq = list(itertools.accumulate(step_sizes))
 
   # Generate noise to infer a given batch.
-  shape = utils.get_input_shape(cfg)
+  shape = utils.get_input_shape(cfg, batch_size)
   model_input = diff_model.get_noise(shape=shape)
 
   sampling_process = cfg["diffusion_cfg", "sampling_process"]
@@ -283,15 +282,21 @@ def main():
   logging.info(f"Storing generations at {gen_dir}.")
 
   batch_size = cfg["train_cfg", "batch_size"]
-  n_images_approx = cfg["infer_cfg", "n_images_approx"]
-  count = math.ceil(n_images_approx / batch_size) or 1
+  n_images = cfg["infer_cfg", "n_images"]
   times = []
-  for idx in tqdm.tqdm(range(count)):
-    times.append(infer(unet_model, diff_model, cfg, out_file_id=f"pred_{idx}"))
+  for idx in tqdm.tqdm(0, n_images, batch_size):
+    times.append(
+        infer(
+            unet_model=unet_model,
+            diff_model=diff_model,
+            cfg=cfg,
+            out_file_id=f"pred_{idx}",
+            batch_size=min(batch_size, n_images - idx),
+        ))
   if len(times) > 1:
     times = times[1:]
     avg_time = np.average(times)
-    logging.info(f"Average time over {count} inferences: {avg_time:0.3f}.")
+    logging.info(f"Average time over {len(times)} inferences: {avg_time:0.3f}.")
 
   trainable_params_count = unet_model.count_params()
   logging.info(f"Trainable parameter count: {trainable_params_count}.")
