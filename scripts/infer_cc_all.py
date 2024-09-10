@@ -7,8 +7,8 @@ import infer_cc
 import utils
 
 _CFG = {
-    "base_exp": "runs_cc/20240906T234605M545",
-    "fine_tuned_exp": "runs_cc/20240907T091926M647",
+    "base_exp": "20240906T234605M545",
+    "fine_tuned_exp": "20240907T091926M647",
 }
 
 MNIST_CFG = {
@@ -36,9 +36,9 @@ MNIST_CFG = {
         "model":
             "runs_cc/{exp_id}/checkpoints/model_99",
         "gen_file":
-            "runs_cc/{exp_id}/generated_images/{infer_id}/plots/{epoch}.png",
+            "runs_cc/{exp_id}/generated_images/{infer_id}/plots/pred.png",
         "ind_path":
-            "runs_cc/{exp_id}/generated_images/{infer_id}/ind/images/{img_id}.png",
+            "runs_cc/{exp_id}/generated_images/{infer_id}/ind/images/{{img_id}}.png",
         "img_lab_path":
             "runs_cc/{exp_id}/generated_images/{infer_id}/ind/img_lab.json"
     },
@@ -51,6 +51,7 @@ MNIST_CFG = {
 
 def update_configs(cfg, exp_id):
   infer_id = utils.get_current_ts()
+  cfg["path", "model"] = cfg["path", "model"].format(exp_id=exp_id)
   cfg["experiment"] = cfg["experiment"].format(infer_id=infer_id)
   kwargs = {"infer_id": infer_id, "exp_id": exp_id}
   for path in ["gen_file", "ind_path", "img_lab_path"]:
@@ -67,7 +68,8 @@ def main():
   epoch_cfg = []
 
   exp_id = cfg["base_exp"]
-  model_dir = os.path.join(exp_id, "checkpoints").format(exp_id=exp_id)
+  model_dir = os.path.join("runs_cc", exp_id,
+                           "checkpoints").format(exp_id=exp_id)
   max_epoch = -1
   model_path = None
   for model_name in os.listdir(model_dir):
@@ -89,12 +91,13 @@ def main():
   infer_cc.infer(base_cfg, "pred", base_cfg["infer_cfg", "format"])
   exp_ids.append(exp_id)
   epoch_cfg.append([0])
-  infer_ids.append([infer_ids])
+  infer_ids.append([infer_id])
 
   epoch_cfg.append([])
   infer_ids.append([])
   exp_id = cfg["fine_tuned_exp"]
-  model_dir = os.path.join(exp_id, "checkpoints").format(exp_id=exp_id)
+  model_dir = os.path.join("runs_cc", exp_id,
+                           "checkpoints").format(exp_id=exp_id)
   for model_name in sorted(os.listdir(model_dir),
                            key=lambda x: int(x.split("_")[-1])):
     epoch = int(model_name.split("_")[-1])
