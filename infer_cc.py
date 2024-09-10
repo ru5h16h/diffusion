@@ -50,8 +50,15 @@ _CFG = {
 }
 
 
-def infer(noise_scheduler, net, cfg, epoch, store_format=["collage"]):
+def infer(cfg, epoch, store_format=["collage"]):
   device = utils_cc.get_device()
+
+  net = utils_cc.ClassConditionedUnet(cfg).to(device)
+  noise_scheduler = utils_cc.get_noise_scheduler(cfg)
+
+  model_path = utils.get_path(cfg, "model")
+  net.load_state_dict(
+      torch.load(model_path, map_location=torch.device(utils_cc.get_device())))
 
   out_channels = cfg["train", "unet", "out_channels"]
   sample_size = cfg["train", "unet", "sample_size"]
@@ -137,21 +144,10 @@ def main():
   cfg = configs.Configs(_CFG, args.configs, args, False)
   logging.info(f"Experiment: {cfg['experiment']}")
 
-  device = utils_cc.get_device()
-
-  net = utils_cc.ClassConditionedUnet(cfg).to(device)
-  noise_scheduler = utils_cc.get_noise_scheduler(cfg)
-
-  model_path = utils.get_path(cfg, "model")
-  net.load_state_dict(
-      torch.load(model_path, map_location=torch.device(utils_cc.get_device())))
-
   infer(
-      noise_scheduler,
-      net,
       cfg,
       "pred",
-      store_format=cfg["infer_cfg", "format"],
+      cfg["infer_cfg", "format"],
   )
 
 

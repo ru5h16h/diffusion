@@ -144,6 +144,10 @@ def train(
 
 def main():
   """The entry point of the training."""
+
+  # TODO:
+  # (1) Add LR scheduler.
+
   args = utils.parse_args()
   if args.debug:
     _CFG["experiment"] = f"{_CFG['experiment']}_debug"

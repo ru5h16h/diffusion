@@ -84,6 +84,9 @@ def main():
   device = utils_cc.get_device()
 
   net = utils_cc.ClassConditionedUnet(cfg).to(device)
+  n_parameters = sum(p.numel() for p in net.parameters())
+  logging.info(f"Number of parameters: {n_parameters}")
+
   checkpoint_path = utils.get_path(cfg, "checkpoint")
   if checkpoint_path:
     net.load_state_dict(torch.load(checkpoint_path))
