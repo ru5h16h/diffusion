@@ -134,7 +134,7 @@ def main():
       model_path = utils.get_path(cfg, "model", epoch=epoch + 1)
       torch.save(net.state_dict(), model_path)
     if epoch + 1 in infer_at or debug:
-      infer_cc.infer(noise_scheduler, net, cfg, epoch)
+      infer_cc.infer(cfg, epoch, net=net)
 
     if debug and epoch == 0:
       break
