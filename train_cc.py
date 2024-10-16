@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import List, Tuple
 
 from pytorch_fid import fid_score
 import torch
@@ -62,6 +63,48 @@ _CFG = {
     }
 }
 
+_TYPE = {
+    "experiment": str,
+    "data": {
+        "set": str,
+        "n_classes": int,
+        "retrain_classes": List[int],
+    },
+    "train": {
+        "batch_size": int,
+        "epochs": int,
+        "lr": float,
+        "save_at": List[int],
+        "unet": {
+            "sample_size": int,
+            "out_channels": int,
+            "layers_per_block": int,
+            "block_out_channels": Tuple[int, ...],
+            "down_block_types": Tuple[str, ...],
+            "up_block_types": Tuple[str, ...],
+        }
+    },
+    "diffusion": {
+        "max_time_steps": int,
+        "beta_schedule": str,
+        "infer_at": List[int],
+    },
+    "path": {
+        "model": str,
+        "gen_file": str,
+        "configs": str,
+        "ind_path": str,
+        "checkpoint": str,
+        "test_images": str,
+        "img_lab_path": str,
+    },
+    "infer_cfg": {
+        "n_images_per_class": int,
+        "format": List[str],
+        "num_inference_steps": int
+    }
+}
+
 
 def get_data(cfg):
   data_name = cfg["data", "set"]
@@ -91,11 +134,17 @@ def get_data(cfg):
 
 
 def main():
-  args = utils.parse_args()
+  args, unknown_args = utils.parse_args()
   if args.debug:
     _CFG["experiment"] = f"{_CFG['experiment']}_debug"
 
-  cfg = configs.Configs(_CFG, args.configs, args)
+  cfg = configs.Configs(
+      default_configs=_CFG,
+      configs_path=args.configs,
+      args=args,
+      config_args=unknown_args,
+      type_hints=_TYPE,
+  )
   logging.info(f"Experiment: {cfg['experiment']}")
 
   device = utils_cc.get_device()

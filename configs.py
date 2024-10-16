@@ -1,4 +1,7 @@
+import ast
 import collections
+import logging
+import sys
 from typing import Any
 
 import utils
@@ -19,16 +22,42 @@ class Configs(dict):
       configs_path=None,
       args=None,
       save_configs=True,
+      config_args=None,
+      type_hints=None,
   ):
+    self.to_save_configs = save_configs
+
     if args is not None:
       default_configs["args"] = vars(args)
-    self.to_save_configs = save_configs
+    if type_hints is not None:
+      default_configs["type_hints"] = type_hints
+
     self.update(default_configs)
+
     if configs_path:
       cfg_args = load_dict_from_file(configs_path)
       self.update_rec(cfg_args)
+
+    if config_args:
+      self.update_config_args(config_args)
+
     if self.to_save_configs:
       self.save_configs()
+
+  def update_config_args(self, config_args):
+    for idx in range(0, len(config_args), 2):
+      this_config = config_args[idx].strip()
+      if not this_config.startswith("--configs"):
+        raise ValueError(f"Invalid config args: {this_config}.")
+      key = tuple(this_config.replace("--configs.", "").split("."))
+      if key not in self:
+        raise ValueError(f"Invalid key: {key}")
+      value_type = self[tuple(["type_hints"] + list(key))]
+      if value_type != str:
+        value_type = ast.literal_eval
+      new_val = value_type(config_args[idx + 1])
+      logging.info(f"{key}: {self[key]} -> {new_val}")
+      self[key] = new_val
 
   def __getitem__(self, __key: Any) -> Any:
     if isinstance(__key, str):
@@ -44,7 +73,7 @@ class Configs(dict):
 
   def save_configs(self):
     cfg_path = utils.get_path(self, "configs")
-    utils.write_json(cfg_path, self)
+    utils.write_txt(cfg_path, self)
 
   def __setitem__(self, keys, value):
     if isinstance(keys, str):
@@ -69,5 +98,24 @@ class Configs(dict):
       if isinstance(val, collections.abc.Mapping):
         self.update_rec(val, keys[:])
       else:
-        self[keys] = cfg_args[key]
+        logging.info(f"{tuple(keys)}: {self[tuple(keys)]} -> {cfg_args[key]}")
+        self[tuple(keys)] = cfg_args[key]
       keys.pop()
+
+  def __contains__(self, key: object) -> bool:
+    if isinstance(key, str):
+      return super().__contains__(key)
+    elif isinstance(key, collections.abc.Iterable):
+      current_dict = self
+      for subkey in key:
+        if isinstance(current_dict, dict) and subkey in current_dict:
+          current_dict = current_dict[subkey]
+        else:
+          return False
+      return True
+    else:
+      raise ValueError(f"Invalid key type: {type(key)}")
+
+
+if __name__ == "__main__":
+  sys.exit("Intended for import.")

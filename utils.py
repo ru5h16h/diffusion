@@ -42,11 +42,16 @@ def get_input_shape(cfg, batch_size=None):
 def parse_args():
   parser = argparse.ArgumentParser()
   parser.add_argument(
+      "--debug",
+      action="store_true",
+      help="toggles debug mode",
+  )
+  parser.add_argument(
       "--configs",
       type=str,
-      default="configs.yaml",
+      help="path to the configs",
   )
-  return parser.parse_args()
+  return parser.parse_known_args()
 
 
 def get_current_ts() -> str:

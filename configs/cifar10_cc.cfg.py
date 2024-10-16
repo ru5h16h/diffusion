@@ -14,9 +14,7 @@ cfg = {
                 ("UpBlock2D", "AttnUpBlock2D", "UpBlock2D", "UpBlock2D"),
             "block_out_channels": (32, 64, 128, 128),
         },
-        "save_at": [
-            5, 10, 25, 50, 75, 100, 150, 200, 250, 300, 350, 400, 450, 500
-        ],
+        "save_at": [],
     },
     "diffusion": {
         "infer_at": [
