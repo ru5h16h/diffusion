@@ -1,5 +1,7 @@
 import logging
+import os
 
+from pytorch_fid import fid_score
 import torch
 from torch import nn
 from torch.utils import data
@@ -38,10 +40,25 @@ _CFG = {
         "infer_at": [1, 5, 10, 25, 50, 75, 100],
     },
     "path": {
-        "model": "runs_cc/{experiment}/checkpoints/model_{epoch}",
-        "gen_file": "runs_cc/{experiment}/generated_images/plot/{epoch}.png",
-        "configs": "runs_cc/{experiment}/configs.json",
-        "checkpoint": ""
+        "model":
+            "runs_cc/{experiment}/checkpoints/model_{epoch}",
+        "gen_file":
+            "runs_cc/{experiment}/generated_images/{experiment}/plots/{epoch}.png",
+        "configs":
+            "runs_cc/{experiment}/configs.json",
+        "ind_path":
+            "runs_cc/{experiment}/generated_images/{epoch}/ind/images/{img_id}.png",
+        "checkpoint":
+            "",
+        "test_images":
+            "cifar10/test",
+        "img_lab_path":
+            "runs_cc/{experiment}/generated_images/{experiment}/ind/img_lab.json"
+    },
+    "infer_cfg": {
+        "n_images_per_class": 1000,
+        "format": ["collage", "ind"],
+        "num_inference_steps": 64
     }
 }
 
@@ -127,14 +144,31 @@ def main():
       if debug and idx > 10:
         break
 
-    avg_loss = sum(losses) / len(losses)
-    logging.info(f"Finished epoch {epoch}. Average loss: {avg_loss:05f}")
-
     if epoch + 1 in save_at or debug:
       model_path = utils.get_path(cfg, "model", epoch=epoch + 1)
       torch.save(net.state_dict(), model_path)
     if epoch + 1 in infer_at or debug:
-      infer_cc.infer(cfg, epoch, net=net)
+      logging.info(f"Inferring @ {epoch + 1}")
+      infer_cc.infer(cfg, epoch, cfg["infer_cfg", "format"], net)
+
+      logging.info(f"Computing FID @ {epoch + 1}")
+      fid_value = fid_score.calculate_fid_given_paths(
+          paths=[
+              utils.get_path(cfg, "test_images"),
+              os.path.dirname(
+                  utils.get_path(cfg,
+                                 "ind_path",
+                                 epoch=epoch + 1,
+                                 img_id="dummy")),
+          ],
+          batch_size=cfg["train", "batch_size"],
+          device=device,
+          dims=2048,
+      )
+      logging.info(f"FID value @ {epoch + 1}: {fid_value:0.6f}")
+
+    avg_loss = sum(losses) / len(losses)
+    logging.info(f"Finished epoch {epoch + 1}. Average loss: {avg_loss:05f}")
 
     if debug and epoch == 0:
       break
