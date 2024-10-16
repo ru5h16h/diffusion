@@ -107,5 +107,10 @@ def get_p_bar(length):
   return tqdm.tqdm(total=length, position=0, leave=True)
 
 
+def write_txt(file_path, data):
+  with safe_open(file_path, "w") as fp:
+    fp.write(str(data))
+
+
 if __name__ == "__main__":
   sys.exit("Intended for import.")
