@@ -133,6 +133,19 @@ def get_data(cfg):
   return train_dataloader
 
 
+def compute_fid(files, batch_size, dims, device, num_workers=1):
+  block_idx = fid_score.InceptionV3.BLOCK_INDEX_BY_DIM[dims]
+  model = fid_score.InceptionV3([block_idx]).to(device)
+  m1, s1 = fid_score.calculate_activation_statistics(files[0], model,
+                                                     batch_size, dims, device,
+                                                     num_workers)
+  m2, s2 = fid_score.calculate_activation_statistics(files[1], model,
+                                                     batch_size, dims, device,
+                                                     num_workers)
+  fid_value = fid_score.calculate_frechet_distance(m1, s1, m2, s2)
+  return fid_value
+
+
 def main():
   args, unknown_args = utils.parse_args()
   if args.debug:
@@ -200,21 +213,23 @@ def main():
       logging.info(f"Inferring @ {epoch + 1}")
       infer_cc.infer(cfg, epoch, cfg["infer_cfg", "format"], net)
 
-      logging.info(f"Computing FID @ {epoch + 1}")
-      fid_value = fid_score.calculate_fid_given_paths(
-          paths=[
-              utils.get_path(cfg, "test_images"),
-              os.path.dirname(
-                  utils.get_path(cfg,
-                                 "ind_path",
-                                 epoch=epoch + 1,
-                                 img_id="dummy")),
-          ],
-          batch_size=cfg["train", "batch_size"],
-          device=device,
-          dims=2048,
-      )
-      logging.info(f"FID value @ {epoch + 1}: {fid_value:0.6f}")
+      if cfg["data", "set"] == "cifar10":
+        logging.info(f"Computing FID @ {epoch + 1}")
+        true_dir = utils.get_path(cfg, "test_images")
+        retrain_classes = cfg["data", "retrain_classes"] or ""
+        if retrain_classes:
+          retrain_classes = tuple([str(cl) for cl in retrain_classes])
+        true_files = utils.get_file_paths(true_dir, retrain_classes, "png")
+        gen_dir = os.path.dirname(
+            utils.get_path(cfg, "ind_path", epoch=epoch + 1, img_id="dummy"))
+        gen_files = utils.get_file_paths(gen_dir, ends_with="png")
+        fid_value = compute_fid(
+            files=[true_files, gen_files],
+            batch_size=cfg["train", "batch_size"],
+            device=device,
+            dims=2048,
+        )
+        logging.info(f"FID value @ {epoch + 1}: {fid_value:0.6f}")
 
     avg_loss = sum(losses) / len(losses)
     logging.info(f"Finished epoch {epoch + 1}. Average loss: {avg_loss:05f}")

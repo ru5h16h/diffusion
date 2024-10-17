@@ -97,5 +97,13 @@ def write_txt(file_path, data):
     fp.write(str(data))
 
 
+def get_file_paths(dir_path, starts_with="", ends_with=""):
+  file_paths = []
+  for file_name in os.listdir(dir_path):
+    if file_name.startswith(starts_with) and file_name.endswith(ends_with):
+      file_paths.append(os.path.join(dir_path, file_name))
+  return file_paths
+
+
 if __name__ == "__main__":
   sys.exit("Intended for import.")
