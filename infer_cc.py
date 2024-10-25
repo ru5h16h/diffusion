@@ -1,5 +1,5 @@
-import collections
 import logging
+from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -34,18 +34,50 @@ _CFG = {
         "beta_schedule": "squaredcos_cap_v2",
     },
     "path": {
-        "model":
-            "runs_cc/20240906T234605M545/checkpoints/model_99",
-        "gen_file":
-            "runs_cc/20240906T234605M545/generated_images/{experiment}/plots/{epoch}.png",
-        "ind_path":
-            "runs_cc/20240906T234605M545/generated_images/{experiment}/ind/images/{img_id}.png",
-        "img_lab_path":
-            "runs_cc/20240906T234605M545/generated_images/{experiment}/ind/img_lab.json"
+        "prefix": "runs_cc/20240906T234605M545",
+        "model": "checkpoints/model_99",
+        "gen_file": "generated_images/{experiment}/plots/{epoch}.png",
+        "ind_path": "generated_images/{experiment}/ind/images/{img_id}.png",
+        "img_lab_path": "generated_images/{experiment}/ind/img_lab.json",
+        "configs": "generated_images/{experiment}/configs.txt"
     },
     "infer_cfg": {
         "n_images_per_class": 1000,
         "format": ["collage", "ind"]
+    }
+}
+
+_TYPE = {
+    "experiment": str,
+    "data": {
+        "n_classes": int,
+    },
+    "train": {
+        "batch_size": int,
+        "unet": {
+            "sample_size": int,
+            "out_channels": int,
+            "layers_per_block": int,
+            "block_out_channels": Tuple[int, ...],
+            "down_block_types": Tuple[str, ...],
+            "up_block_types": Tuple[str, ...],
+        }
+    },
+    "diffusion": {
+        "max_time_steps": int,
+        "beta_schedule": str,
+    },
+    "path": {
+        "prefix": str,
+        "model": str,
+        "gen_file": str,
+        "ind_path": str,
+        "img_lab_path": str,
+        "configs": str,
+    },
+    "infer_cfg": {
+        "n_images_per_class": int,
+        "format": List[str, ...]
     }
 }
 
@@ -147,18 +179,20 @@ def infer(cfg, epoch, store_format=["collage"], net=None):
 
 
 def main():
-  args = utils.parse_args()
+  args, unknown_args = utils.parse_args()
   if args.debug:
     _CFG["experiment"] = f"{_CFG['experiment']}_debug"
 
-  cfg = configs.Configs(_CFG, args.configs, args, False)
+  cfg = configs.Configs(
+      default_configs=_CFG,
+      configs_path=args.configs,
+      args=args,
+      config_args=unknown_args,
+      type_hints=_TYPE,
+  )
   logging.info(f"Experiment: {cfg['experiment']}")
 
-  infer(
-      cfg,
-      "pred",
-      cfg["infer_cfg", "format"],
-  )
+  infer(cfg=cfg, epoch="pred", store_format=cfg["infer_cfg", "format"])
 
 
 if __name__ == "__main__":
