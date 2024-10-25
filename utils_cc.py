@@ -35,7 +35,7 @@ class ClassConditionedUnet(nn.Module):
 
 
 def get_noise_scheduler(cfg):
-  return diffusers.DDIMScheduler(
+  return diffusers.DDPMScheduler(
       num_train_timesteps=cfg["diffusion", "max_time_steps"],
       beta_schedule=cfg["diffusion", "beta_schedule"],
   )

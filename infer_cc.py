@@ -54,10 +54,10 @@ def infer(cfg, epoch, store_format=["collage"], net=None):
   device = utils_cc.get_device()
 
   noise_scheduler = utils_cc.get_noise_scheduler(cfg)
-  noise_scheduler.set_timesteps(
-      num_inference_steps=cfg["infer_cfg", "num_inference_steps"],
-      device=device,
-  )
+  # noise_scheduler.set_timesteps(
+  #     num_inference_steps=cfg["infer_cfg", "num_inference_steps"],
+  #     device=device,
+  # )
 
   if net is None:
     net = utils_cc.ClassConditionedUnet(cfg).to(device)
