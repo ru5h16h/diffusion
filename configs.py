@@ -55,7 +55,10 @@ class Configs(dict):
       value_type = self[tuple(["type_hints"] + list(key))]
       if value_type != str:
         value_type = ast.literal_eval
-      new_val = value_type(config_args[idx + 1])
+      if config_args[idx + 1] == "None":
+        new_val = None
+      else:
+        new_val = value_type(config_args[idx + 1])
       logging.info(f"{key}: {self[key]} -> {new_val}")
       self[key] = new_val
 

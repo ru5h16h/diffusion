@@ -72,6 +72,10 @@ def get_path(cfg, key, **kwargs):
   if "experiment" not in kwargs:
     kwargs["experiment"] = cfg["experiment"]
   path = cfg["path", key].format(**kwargs)
+  path = os.path.expanduser(path)
+  prefix = cfg["path", "prefix"]
+  if prefix:
+    path = os.path.join(prefix, path)
   cached_makedirs(os.path.dirname(path))
   return path
 

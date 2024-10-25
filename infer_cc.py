@@ -77,7 +77,7 @@ _TYPE = {
     },
     "infer_cfg": {
         "n_images_per_class": int,
-        "format": List[str, ...]
+        "format": List[str]
     }
 }
 
