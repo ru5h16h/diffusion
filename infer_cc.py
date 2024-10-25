@@ -178,6 +178,10 @@ def infer(cfg, epoch, store_format=["collage"], net=None):
   p_bar.close()
 
 
+def get_epoch_from_checkpoint(model_path):
+  return int(model_path.split("model_")[-1]) - 1
+
+
 def main():
   args, unknown_args = utils.parse_args()
   if args.debug:
@@ -192,7 +196,8 @@ def main():
   )
   logging.info(f"Experiment: {cfg['experiment']}")
 
-  infer(cfg=cfg, epoch="pred", store_format=cfg["infer_cfg", "format"])
+  epoch = get_epoch_from_checkpoint(model_path=utils.get_path(cfg, "model"))
+  infer(cfg=cfg, epoch=epoch, store_format=cfg["infer_cfg", "format"])
 
 
 if __name__ == "__main__":
