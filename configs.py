@@ -25,7 +25,8 @@ class Configs(dict):
       config_args=None,
       type_hints=None,
   ):
-    self.to_save_configs = save_configs
+    # Setting to False initial to avoid creating exp folder with name.
+    self.to_save_configs = False
 
     if args is not None:
       default_configs["args"] = vars(args)
@@ -41,6 +42,7 @@ class Configs(dict):
     if config_args:
       self.update_config_args(config_args)
 
+    self.to_save_configs = save_configs
     if self.to_save_configs:
       self.save_configs()
 
